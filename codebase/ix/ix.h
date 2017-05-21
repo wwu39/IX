@@ -83,6 +83,7 @@ class IndexManager {
         bool fileExists(const string &fileName);
         void initIXfile(const Attribute& attr, IXFileHandle &ixfileHandle);
         bool checkIXAttribute(const Attribute& attr, IXFileHandle &ixfileHandle);
+        int findPosition(const Attribute &attribute, const void *key, void *page);
         int getPageFreeSpaceSize(const void * page);
         int getAttrSize(const Attribute &attribute, const void *key);
 };

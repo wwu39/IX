@@ -91,6 +91,7 @@ RC IndexManager::insertEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
         if (checkIXAttribute(attribute, ixfileHandle)) return IX_ATTR_MISMATCH;
     }
     void * page = malloc(PAGE_SIZE);
+    int targetPage = findPosition(attribute, key, page);
     int FSSzie = getPageFreeSpaceSize(page);
     int attrSize = getAttrSize(attribute, key);
     if (attrSize + (int)sizeof(Entry) <= FSSzie) { // can be fit in
@@ -195,6 +196,13 @@ int IndexManager::getAttrSize(const Attribute &attribute, const void *key)
             return (vclen + 4);
         }
     }
+    return -1;
+}
+
+int IndexManager::findPosition(const Attribute &attribute, const void *key, void *page)
+{
+    // this function find the page where the key should belong to
+    // regardless if the key can be fit in
     return -1;
 }
 

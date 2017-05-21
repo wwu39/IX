@@ -2,6 +2,7 @@
 #include "ix.h"
 #include <sys/stat.h>
 #include <cstring>
+#include <stdlib.h>
 
 IndexManager* IndexManager::_index_manager = 0;
 

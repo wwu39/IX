@@ -16,11 +16,21 @@
 #define IX_FILE_DN_EXIST 5
 #define IX_FILE_NOT_OPEN 6
 
+#define IX_ATTR_MISMATCH 7
+
 typedef struct
 {
-    uint32_t rootPageNum; // keep track of where the root is
-    Attribute ixattr;  // attribute of the index
-} ixheader; // store the ixheader in the first page
+    uint16_t FS; // free space pointer
+    uint16_t N; // number of k-v pairs
+    uint8_t leaf; // is this page a leaf page? 0 = no
+    uint32_t next; // if it's a leaf page, what's the next leaf?
+} SlotDirectoryHeader;
+
+typedef struct
+{
+    uint32_t length; 
+    int32_t offset;
+} Entry;
 
 // bool operator== (const Attribute& attr1, const Attribute& attr2) { return attr1.name == attr2.name && attr1.type == attr2.type && attr1.length == attr2.length; };
 
@@ -70,25 +80,9 @@ class IndexManager {
         static IndexManager *_index_manager;
         // Private helper methods
         bool fileExists(const string &fileName);
+        void initIXfile(const Attribute& attr, IXFileHandle &ixfileHandle);
+        bool checkIXAttribute(const Attribute& attr, IXFileHandle &ixfileHandle);
 };
-
-
-class IX_ScanIterator {
-    public:
-
-		// Constructor
-        IX_ScanIterator();
-
-        // Destructor
-        ~IX_ScanIterator();
-
-        // Get next matching entry
-        RC getNextEntry(RID &rid, void *key);
-
-        // Terminate index scan
-        RC close();
-};
-
 
 
 class IXFileHandle {
@@ -123,6 +117,41 @@ class IXFileHandle {
         void setfd(FILE *fd);
         FILE *getfd();
 
+};
+
+
+class IX_ScanIterator {
+    friend class IndexManager;
+    private:
+
+        // private field
+        IXFileHandle ixfileHandle;
+        Attribute attribute;
+        const void *lowKey;
+        const void *highKey;
+        bool lowKeyInclusive;
+        bool highKeyInclusive;
+
+        // private method
+        RC scanInit(IXFileHandle &ixfileHandle,
+                const Attribute &attribute,
+                const void *lowKey,
+                const void *highKey,
+                bool lowKeyInclusive,
+                bool highKeyInclusive);
+    public:
+
+		// Constructor
+        IX_ScanIterator();
+
+        // Destructor
+        ~IX_ScanIterator();
+
+        // Get next matching entry
+        RC getNextEntry(RID &rid, void *key);
+
+        // Terminate index scan
+        RC close();
 };
 
 #endif

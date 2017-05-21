@@ -1,6 +1,7 @@
 
 #include "ix.h"
 #include <sys/stat.h>
+#include <cstring>
 
 IndexManager* IndexManager::_index_manager = 0;
 
@@ -32,7 +33,7 @@ RC IndexManager::createFile(const string &fileName)
     // Return an error if we fail
     if (pFile == NULL)
         return IX_OPEN_FAILED;
-
+    
     fclose (pFile);
     return SUCCESS;
 }
@@ -80,8 +81,84 @@ RC IndexManager::closeFile(IXFileHandle &ixfileHandle)
 
 RC IndexManager::insertEntry(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid)
 {
-    return -1;
+    // check the attribute
+    int numOfPage = ixfileHandle.getNumberOfPages();
+    if (numOfPage == 0) { // first insert
+        // set attribute
+        initIXfile(attribute, ixfileHandle);
+    } else {
+        // check attribute
+        if (checkIXAttribute(attribute, ixfileHandle)) return IX_ATTR_MISMATCH;
+    }
+
+    return SUCCESS;
 }
+
+void IndexManager::initIXfile(const Attribute& attr, IXFileHandle &ixfileHandle)
+{
+    // this function store the header info in page 0 
+    // and create an empty root page (page 1)
+
+    // header page format:
+    // |rootPageNum(4B)|ixAttribute(variable length)|
+    // assume ixAttribute can be fit in a page
+    void * page = malloc(PAGE_SIZE);
+    int offset = 0;
+
+    unsigned rootPageNum = 1;
+    memcpy((char *)page + offset, &rootPageNum, sizeof(unsigned));
+    offset += sizeof(unsigned);
+
+    int namelen = attr.name.size();
+    memcpy((char *)page + offset, &namelen, sizeof(int));
+    offset += sizeof(int);
+
+    memcpy((char *)page + offset, attr.name.c_str(), namelen);
+    offset += namelen;
+
+    memcpy((char *)page + offset, &attr.type, sizeof(AttrType));
+    offset += sizeof(AttrType);
+
+    memcpy((char *)page + offset, &attr.length, sizeof(AttrLength));
+
+    // flush it to file
+    ixfileHandle.appendPage(page);
+
+    // empty root page
+    // root is a leaf at the beginning
+    offset = 0;
+    // ...
+    ixfileHandle.appendPage(page);
+    free(page);
+}
+
+bool IndexManager::checkIXAttribute(const Attribute& attr, IXFileHandle &ixfileHandle)
+{
+    // obain the header page
+    void * page = malloc(PAGE_SIZE);
+    ixfileHandle.readPage(0, page);
+    int offset = 4;
+    int namelen;
+    memcpy(&namelen, (char *)page + offset, sizeof(int));
+    offset += sizeof(int);
+
+    char name[namelen + 1];
+    memcpy(name, (char *)page + offset, namelen);
+    offset += namelen;
+    name[namelen] = '\0';
+
+    AttrType type;
+    memcpy(&type, (char *)page + offset, sizeof(AttrType));
+    offset += sizeof(AttrType);
+
+    AttrLength length;
+    memcpy(&length, (char *)page + offset, sizeof(AttrLength));
+
+    free(page);
+
+    return string(name) == attr.name && type == attr.type && length == attr.length;
+}
+
 
 RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid)
 {
@@ -103,7 +180,7 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle,
         bool        	highKeyInclusive,
         IX_ScanIterator &ix_ScanIterator)
 {
-    return -1;
+    return ix_ScanIterator.scanInit(ixfileHandle, attribute, lowKey, highKey, lowKeyInclusive, highKeyInclusive);
 }
 
 void IndexManager::printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute) const {
@@ -125,6 +202,22 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
 RC IX_ScanIterator::close()
 {
     return -1;
+}
+
+RC IX_ScanIterator::scanInit(IXFileHandle &ixfileHandle,
+                const Attribute &attribute,
+                const void *lowKey,
+                const void *highKey,
+                bool lowKeyInclusive,
+                bool highKeyInclusive)
+{
+    this->ixfileHandle = ixfileHandle;
+    this->attribute = attribute;
+    this->lowKey = lowKey;
+    this->highKey = highKey;
+    this->lowKeyInclusive = lowKeyInclusive;
+    this->highKeyInclusive = highKeyInclusive;
+    return SUCCESS;
 }
 
 IXFileHandle::IXFileHandle()

@@ -126,8 +126,17 @@ void IndexManager::initIXfile(const Attribute& attr, IXFileHandle &ixfileHandle)
 
     // empty root page
     // root is a leaf at the beginning
-    offset = 0;
-    // ...
+    // non-leaf page format:
+    // |P0|K1|P1|K2|P2|...|slotDir|header|
+    // leaf page format:
+    // |K1|RID1|K2|RID2|...|slotDir|header|
+    IX_SlotDirectoryHeader header;
+    header.FS = 0;
+    header.N = 0;
+    header.leaf = 1; // yes it's a leaf
+    header.next = LEAF_END;
+    offset = PAGE_SIZE - sizeof(IX_SlotDirectoryHeader);
+    memcpy((char *)page + offset, &header, sizeof(IX_SlotDirectoryHeader));
     ixfileHandle.appendPage(page);
     free(page);
 }

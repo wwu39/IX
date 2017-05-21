@@ -7,7 +7,8 @@
 
 #include "../rbf/rbfm.h"
 
-# define IX_EOF (-1)  // end of the index scan
+#define IX_EOF (-1)  // end of the index scan
+#define LEAF_END (-1) // end of consecutive leaves
 
 #define IX_FILE_EXISTS   1
 #define IX_OPEN_FAILED   2
@@ -23,8 +24,8 @@ typedef struct
     uint16_t FS; // free space pointer
     uint16_t N; // number of k-v pairs
     uint8_t leaf; // is this page a leaf page? 0 = no
-    uint32_t next; // if it's a leaf page, what's the next leaf?
-} SlotDirectoryHeader;
+    int32_t next; // if it's a leaf page, what's the next leaf?
+} IX_SlotDirectoryHeader;
 
 typedef struct
 {

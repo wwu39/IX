@@ -84,13 +84,21 @@ RC IndexManager::insertEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
     // check the attribute
     int numOfPage = ixfileHandle.getNumberOfPages();
     if (numOfPage == 0) { // first insert
-        // set attribute
+        // initialize the file
         initIXfile(attribute, ixfileHandle);
     } else {
         // check attribute
         if (checkIXAttribute(attribute, ixfileHandle)) return IX_ATTR_MISMATCH;
     }
+    void * page = malloc(PAGE_SIZE);
+    int FSSzie = getPageFreeSpaceSize(page);
+    int attrSize = getAttrSize(attribute, key);
+    if (attrSize + (int)sizeof(Entry) <= FSSzie) { // can be fit in
 
+    } else { // must split
+
+    }
+    free(page);
     return SUCCESS;
 }
 
@@ -106,7 +114,7 @@ void IndexManager::initIXfile(const Attribute& attr, IXFileHandle &ixfileHandle)
     int offset = 0;
 
     unsigned rootPageNum = 1;
-    memcpy((char *)page + offset, &rootPageNum, sizeof(unsigned));
+    memcpy((char *)page, &rootPageNum, sizeof(unsigned));
     offset += sizeof(unsigned);
 
     int namelen = attr.name.size();
@@ -168,6 +176,27 @@ bool IndexManager::checkIXAttribute(const Attribute& attr, IXFileHandle &ixfileH
     return string(name) == attr.name && type == attr.type && length == attr.length;
 }
 
+int IndexManager::getPageFreeSpaceSize(const void * page)
+{
+    IX_SlotDirectoryHeader header;
+    memcpy(&header, (char *)page + PAGE_SIZE - sizeof(IX_SlotDirectoryHeader), sizeof(IX_SlotDirectoryHeader));
+    return (PAGE_SIZE - header.FS - header.N * sizeof(Entry) - sizeof(IX_SlotDirectoryHeader));
+}
+
+int IndexManager::getAttrSize(const Attribute &attribute, const void *key)
+{
+    switch (attribute.type) {
+        case TypeInt: return INT_SIZE;
+        case TypeReal: return REAL_SIZE;
+        case TypeVarChar:
+        {
+            int vclen;
+            memcpy(&vclen, key, 4);
+            return (vclen + 4);
+        }
+    }
+    return -1;
+}
 
 RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid)
 {

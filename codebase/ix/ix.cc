@@ -245,7 +245,36 @@ IX_ScanIterator::~IX_ScanIterator()
 
 RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
 {
-    return -1;
+    void* page = malloc(PAGE_SIZE);
+    if(ixfileHandle.readPage(this->currentPage,page))
+        return FH_READ_FAILED;
+
+    IX_SlotDirectoryHeader currentPageHeader = IndexManager::getPageHeader(page);
+
+    if(currentPageHeader.N < this->entry_number_low_key)
+    {
+        this->entry_number_low_key = 1;
+        this->currentPage = currentPageHeader.next;
+
+        if(this->currentPage == this->highPageNum)
+        {
+            if(this->entry_number_low_key > this->entry_number_high_key )
+                return SUCCESS;
+        }
+        
+        if(readEntry(rid,key))
+            return FH_READ_FAILED;
+        this->entry_number_low_key++;
+
+    }
+    else{
+        if(readEntry(rid,key))
+            return FH_READ_FAILED;
+
+        this->entry_number_low_key++;
+    }
+    
+    return SUCCESS;
 }
 
 RC IX_ScanIterator::close()
@@ -289,7 +318,7 @@ RC IX_ScanIterator::scanInit(IXFileHandle &ixfileHandle,
         memcpy(&float_lowKey,lowKey,REAL_SIZE);
         memcpy(&float_highKey,highKey,REAL_SIZE);
 
-        if(lowKey > highKey)
+        if(float_lowKey > float_highKey)
             return -1;
         break;
 
@@ -446,13 +475,17 @@ int IndexManager::getRoot(IXFileHandle &ixfileHandle)
      if(this->ixfileHandle.readPage(rootPageNum,data))
         return RBFM_READ_FAILED;
 
+    void * page = malloc(PAGE_SIZE);
      if(this->lowKey != NULL)
      {
-         if(searchKey(ixfileHandle,rootPageNum,this->currentPage,this->currentEntryOffset))
+         if(this->currentPage = IndexManager::findPosition(ixfileHandle,attribute,this->lowKey,page)<0)
+            return IX_KEY_NOT_FOUND;
+
+         if(searchKey(ixfileHandle,this->currentPage,this->currentEntryOffset, this->entry_number_low_key, page))
             return IX_KEY_NOT_FOUND; // KEY NOT FOUND
      }
      else{
-         if(searchLeftEnd(ixfileHandle,rootPageNum,this->currentPage,this->currentEntryOffset))
+         if(searchLeftEnd(ixfileHandle,rootPageNum,this->currentPage,this->currentEntryOffset, this->entry_number_low_key))
             return IX_KEY_NOT_FOUND;
      }
     
@@ -471,31 +504,87 @@ int IndexManager::getRoot(IXFileHandle &ixfileHandle)
 
      if(this->highKey != NULL)
      {
-         if(searchKey(ixfileHandle,rootPageNum,this->highPageNum,this->limitOffset))
+          void * page = malloc(PAGE_SIZE);
+          if(this->highPageNum = IndexManager::findPosition(ixfileHandle,attribute,this->highKey,page)<0)
+            return IX_KEY_NOT_FOUND;
+
+         if(searchKey(ixfileHandle,this->currentPage,this->limitOffset, this->entry_number_high_key,page))
             return IX_KEY_NOT_FOUND; // KEY NOT FOUND
      }
      else{
-         if(searchRightEnd(ixfileHandle,rootPageNum,this->currentPage,this->limitOffset))
+         if(searchRightEnd(ixfileHandle,rootPageNum,this->currentPage,this->limitOffset, this->entry_number_high_key))
             return IX_KEY_NOT_FOUND;
      }
     
     return SUCCESS;
  }
 
- int IX_ScanIterator::searchKey(IXFileHandle &ixfileHandle, int pageNum, int &pageKeyNum, int &offset)
+ int IX_ScanIterator::searchKey(IXFileHandle &ixfileHandle, int pageNum, int &offset, int entryNumber, void* page)
  {
      void* data = malloc(PAGE_SIZE);
      return -1;
  }
 
- int IX_ScanIterator::searchLeftEnd(IXFileHandle &ixfileHandle, int pageNum, int &pageKeyNum, int &offset)
+ int IX_ScanIterator::searchLeftEnd(IXFileHandle &ixfileHandle, int pageNum, int &pageKeyNum, int &offset, int &entryNumber)
  {
      return -1;
  }
 
- int IX_ScanIterator::searchRightEnd(IXFileHandle &ixfileHandle, int pageNum, int &pageKeyNum, int &offset)
+ int IX_ScanIterator::searchRightEnd(IXFileHandle &ixfileHandle, int pageNum, int &pageKeyNum, int &offset, int &entryNumber)
  {
      return -1;
  }
+
+RC IX_ScanIterator::readEntry(RID &rid, void *key)
+{
+    void* data = malloc(PAGE_SIZE);
+
+    if(this->ixfileHandle.readPage(this->currentPage,data))
+        return RBFM_READ_FAILED;
+
+    if(this->attribute.type == TypeInt)
+    {
+        memcpy(key,(char *)data+currentEntryOffset,INT_SIZE);
+        currentEntryOffset+=INT_SIZE;
+        memcpy(&rid,(char *)data+currentEntryOffset,sizeof(RID));
+        currentEntryOffset+=sizeof(RID);
+    }
+    else if(this->attribute.type == TypeReal)
+    {
+        memcpy(key,(char *)data+currentEntryOffset,REAL_SIZE);
+        currentEntryOffset += REAL_SIZE;
+        memcpy(&rid,(char *)data+currentEntryOffset,sizeof(RID));
+        currentEntryOffset += sizeof(RID);
+
+    }
+    else if(this->attribute.type == TypeVarChar)
+    {
+        uint32_t varcharSize;
+        memcpy(&varcharSize,(char *)data+currentEntryOffset,INT_SIZE);
+        currentEntryOffset+=INT_SIZE;
+        memcpy(key,(char *)data+currentEntryOffset,varcharSize);
+        currentEntryOffset+=varcharSize;
+        memcpy(&rid,(char *)data+currentEntryOffset,sizeof(RID));
+        currentEntryOffset+=sizeof(RID);
+    }
+}
 
  //------
+
+ int IndexManager::findPosition(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, void *page)
+{
+
+    return -1;
+}
+
+IX_SlotDirectoryHeader IndexManager::getPageHeader(const void * page)
+{
+    IX_SlotDirectoryHeader header;
+    memcpy(&header, (char *)page + PAGE_SIZE - sizeof(IX_SlotDirectoryHeader), sizeof(IX_SlotDirectoryHeader));
+    return header;
+}
+
+
+
+
+

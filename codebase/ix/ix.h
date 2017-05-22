@@ -46,6 +46,8 @@ class IndexManager {
 
         //Daniel's changes
         static int getRoot(IXFileHandle &ixfileHandle);
+        static int findPosition(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, void *page);
+        static IX_SlotDirectoryHeader getPageHeader(const void * page);
         // ----
 
         // Create an index file.
@@ -149,6 +151,8 @@ class IX_ScanIterator {
         int currentPage;
         int currentEntryOffset;
         int limitOffset;
+        int entry_number_low_key;
+        int entry_number_high_key;
 
 
         // private method
@@ -162,9 +166,11 @@ class IX_ScanIterator {
         //Helper functions created by Daniel
     int setLowKeyPageNum();
     int setHighKeyPageNum();
-    int searchKey(IXFileHandle &ixfileHandle, int pageNum, int &pageKeyNum, int &offset);
-    int searchLeftEnd(IXFileHandle &ixfileHandle, int pageNum, int &pageKeyNum, int &offset);
-    int searchRightEnd(IXFileHandle &ixfileHandle, int pageNum, int &pageKeyNum, int &offset);
+    int searchKey(IXFileHandle &ixfileHandle, int pageNum, int &offset, int entryNumber, void* page);
+    int searchLeftEnd(IXFileHandle &ixfileHandle, int pageNum, int &pageKeyNum, int &offset, int &entryNumber);
+    int searchRightEnd(IXFileHandle &ixfileHandle, int pageNum, int &pageKeyNum, int &offset, int &entryNumber);
+    RC readEntry(RID &rid, void *key);
+
 
     //-----
         

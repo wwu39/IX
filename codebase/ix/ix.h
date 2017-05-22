@@ -18,6 +18,7 @@
 #define IX_FILE_NOT_OPEN 6
 
 #define IX_ATTR_MISMATCH 7
+#define IX_ATTR_DN_EXIST 8
 
 typedef struct
 {
@@ -25,6 +26,7 @@ typedef struct
     uint16_t N; // number of k-v pairs
     uint8_t leaf; // is this page a leaf page? 0 = no
     int32_t next; // if it's a leaf page, what's the next leaf?
+    int32_t parent; // should have parent. root's parent is 0
 } IX_SlotDirectoryHeader;
 
 typedef struct
@@ -83,9 +85,15 @@ class IndexManager {
         bool fileExists(const string &fileName);
         void initIXfile(const Attribute& attr, IXFileHandle &ixfileHandle);
         bool checkIXAttribute(const Attribute& attr, IXFileHandle &ixfileHandle);
-        int findPosition(const Attribute &attribute, const void *key, void *page);
+        int findPosition(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, void *page);
+        void insertEntryToPage(const Attribute &attribute, const void *key, const RID &rid, void *page);
+
         int getPageFreeSpaceSize(const void * page);
+        IX_SlotDirectoryHeader getPageHeader(const void * page);
+        void setPageHeader(void * page, const IX_SlotDirectoryHeader& header);
         int getAttrSize(const Attribute &attribute, const void *key);
+        Entry getEntry(const int i, const void * page);
+        void setEntry(const int i, const Entry entry, void * page); // i starts at 0
 };
 
 

@@ -28,8 +28,8 @@ using namespace std;
 // Record ID
 typedef struct
 {
-    uint32_t pageNum; // page number
-    uint32_t slotNum; // slot number in the page
+    int32_t pageNum; // page number // change to signed
+    int32_t slotNum; // slot number in the page // change to signed
 } RID;
 
 

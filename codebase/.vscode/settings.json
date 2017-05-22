@@ -12,6 +12,12 @@
         "xmemory0": "cpp",
         "xstddef": "cpp",
         "xtr1common": "cpp",
-        "iosfwd": "cpp"
+        "iosfwd": "cpp",
+        "set": "cpp",
+        "istream": "cpp",
+        "algorithm": "cpp",
+        "xlocmon": "cpp",
+        "xlocnum": "cpp",
+        "xloctime": "cpp"
     }
 }

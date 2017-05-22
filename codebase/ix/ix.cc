@@ -226,6 +226,9 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle,
         bool        	highKeyInclusive,
         IX_ScanIterator &ix_ScanIterator)
 {
+    if (checkIXAttribute(attribute, ixfileHandle)) 
+        return IX_ATTR_MISMATCH;
+        
     return ix_ScanIterator.scanInit(ixfileHandle, attribute, lowKey, highKey, lowKeyInclusive, highKeyInclusive);
 }
 
@@ -263,6 +266,54 @@ RC IX_ScanIterator::scanInit(IXFileHandle &ixfileHandle,
     this->highKey = highKey;
     this->lowKeyInclusive = lowKeyInclusive;
     this->highKeyInclusive = highKeyInclusive;
+
+
+
+
+    switch(attribute.type)// Make sure lowKey<=HighKey
+    {
+        case TypeInt:
+        uint32_t int_lowKey;
+        uint32_t int_highKey;
+        memcpy(&int_lowKey,lowKey,INT_SIZE);
+        memcpy(&int_highKey,highKey,INT_SIZE);
+
+        if(lowKey > highKey)
+            return -1;
+        break;
+
+        case TypeReal:
+        float float_lowKey;
+        float float_highKey;
+
+        memcpy(&float_lowKey,lowKey,REAL_SIZE);
+        memcpy(&float_highKey,highKey,REAL_SIZE);
+
+        if(lowKey > highKey)
+            return -1;
+        break;
+
+        case TypeVarChar:
+        uint32_t varcharSize_lowKey;
+        uint32_t varcharSize_highKey;
+        memcpy(&varcharSize_lowKey,lowKey,VARCHAR_LENGTH_SIZE);
+        memcpy(&varcharSize_highKey,highKey,VARCHAR_LENGTH_SIZE);
+
+        char *data_string_lowKey = (char*) malloc(varcharSize_lowKey + 1);
+        char *data_string_highKey = (char*) malloc(varcharSize_highKey + 1);
+
+        memcpy(data_string_lowKey,lowKey,varcharSize_lowKey);
+        memcpy(data_string_highKey,highKey,varcharSize_lowKey);
+
+        if(data_string_lowKey> data_string_highKey)
+            return -1;
+        break;
+
+    } 
+
+    if(setLowKeyPageNum() || setLowKeyPageNum())
+        return -1;
+
     return SUCCESS;
 }
 
@@ -366,3 +417,43 @@ FILE *IXFileHandle::getfd()
 {
     return _fd;
 }
+
+
+//------- helper functions created by Daniel
+
+int IndexManager::getRoot(IXFileHandle &ixfileHandle)
+{
+    int rootPageNum;
+
+    void *data = malloc(PAGE_SIZE);
+    ixfileHandle.readPage(0,data);
+    memcpy(&rootPageNum,data,4);
+
+    free(data);
+    return rootPageNum;
+
+}
+
+
+Attribute IndexManager::getIndexAttribute(IXFileHandle &ixfileHandle)
+{
+    Attribute indexAttribute;
+
+    void *data = malloc(PAGE_SIZE);
+    ixfileHandle.readPage(0,data);
+    memcpy(&indexAttribute,data+4,sizeof(Attribute));
+
+    return indexAttribute;
+}
+
+ int IX_ScanIterator::setLowKeyPageNum()
+ {
+     return -1;
+ }
+
+ int IX_ScanIterator::setHighKeyPageNum()
+ {
+     return -1;
+ }
+
+ //------

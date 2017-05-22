@@ -43,6 +43,10 @@ class IndexManager {
     public:
         static IndexManager* instance();
 
+        //Daniel's changes
+        static Attribute getIndexAttribute(IXFileHandle &ixfileHandle);
+        // ----
+
         // Create an index file.
         RC createFile(const string &fileName);
 
@@ -82,10 +86,14 @@ class IndexManager {
         // Private helper methods
         bool fileExists(const string &fileName);
         void initIXfile(const Attribute& attr, IXFileHandle &ixfileHandle);
-        bool checkIXAttribute(const Attribute& attr, IXFileHandle &ixfileHandle);
+         bool checkIXAttribute(const Attribute& attr, IXFileHandle &ixfileHandle);
         int findPosition(const Attribute &attribute, const void *key, void *page);
         int getPageFreeSpaceSize(const void * page);
         int getAttrSize(const Attribute &attribute, const void *key);
+
+        //--Daniel's changes
+        static int getRoot(IXFileHandle &ixfileHandle);
+        //------
 };
 
 
@@ -115,11 +123,14 @@ class IXFileHandle {
 	// Put the current counter values of associated PF FileHandles into variables
 	RC collectCounterValues(unsigned &readPageCount, unsigned &writePageCount, unsigned &appendPageCount);
 
+
     private:
         FILE *_fd;
         // Private helper methods
         void setfd(FILE *fd);
         FILE *getfd();
+
+
 
 };
 
@@ -135,6 +146,11 @@ class IX_ScanIterator {
         const void *highKey;
         bool lowKeyInclusive;
         bool highKeyInclusive;
+        int LowPageNum;
+        int highPageNum;
+        int currentPage;
+        int currentEntryOffset;
+
 
         // private method
         RC scanInit(IXFileHandle &ixfileHandle,
@@ -143,6 +159,14 @@ class IX_ScanIterator {
                 const void *highKey,
                 bool lowKeyInclusive,
                 bool highKeyInclusive);
+
+        //Helper functions created by Daniel
+    int setLowKeyPageNum();
+    int setHighKeyPageNum();
+
+    //-----
+        
+        
     public:
 
 		// Constructor

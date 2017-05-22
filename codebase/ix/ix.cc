@@ -228,7 +228,7 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle,
 {
     if (checkIXAttribute(attribute, ixfileHandle)) 
         return IX_ATTR_MISMATCH;
-        
+
     return ix_ScanIterator.scanInit(ixfileHandle, attribute, lowKey, highKey, lowKeyInclusive, highKeyInclusive);
 }
 
@@ -305,7 +305,7 @@ RC IX_ScanIterator::scanInit(IXFileHandle &ixfileHandle,
         memcpy(data_string_lowKey,lowKey,varcharSize_lowKey);
         memcpy(data_string_highKey,highKey,varcharSize_lowKey);
 
-        if(data_string_lowKey> data_string_highKey)
+        if(data_string_lowKey > data_string_highKey)
             return -1;
         break;
 
@@ -435,16 +435,6 @@ int IndexManager::getRoot(IXFileHandle &ixfileHandle)
 }
 
 
-Attribute IndexManager::getIndexAttribute(IXFileHandle &ixfileHandle)
-{
-    Attribute indexAttribute;
-
-    void *data = malloc(PAGE_SIZE);
-    ixfileHandle.readPage(0,data);
-    memcpy(&indexAttribute,data+4,sizeof(Attribute));
-
-    return indexAttribute;
-}
 
  int IX_ScanIterator::setLowKeyPageNum()
  {

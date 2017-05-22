@@ -44,7 +44,7 @@ class IndexManager {
         static IndexManager* instance();
 
         //Daniel's changes
-        static Attribute getIndexAttribute(IXFileHandle &ixfileHandle);
+        static int getRoot(IXFileHandle &ixfileHandle);
         // ----
 
         // Create an index file.
@@ -91,9 +91,7 @@ class IndexManager {
         int getPageFreeSpaceSize(const void * page);
         int getAttrSize(const Attribute &attribute, const void *key);
 
-        //--Daniel's changes
-        static int getRoot(IXFileHandle &ixfileHandle);
-        //------
+       
 };
 
 

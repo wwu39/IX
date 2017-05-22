@@ -16,8 +16,10 @@
 #define IX_HANDLE_IN_USE 4
 #define IX_FILE_DN_EXIST 5
 #define IX_FILE_NOT_OPEN 6
+#define IX_FAILED_TO_WRITE 7
 
-#define IX_ATTR_MISMATCH 7
+#define IX_ATTR_MISMATCH 8
+#define IX_ATTR_DN_EXIST 9
 
 typedef struct
 {

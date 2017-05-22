@@ -1,8 +1,10 @@
-
-#include "ix.h"
-#include <sys/stat.h>
-#include <cstring>
-#include <stdlib.h>
+#include"ix.h"
+#include<sys/stat.h>
+#include<cstring>
+#include<stdlib.h>
+#include<iostream>
+#include<stdio.h>
+#include<string.h>
 
 IndexManager* IndexManager::_index_manager = 0;
 
@@ -24,7 +26,7 @@ IndexManager::~IndexManager()
 
 RC IndexManager::createFile(const string &fileName)
 {
-    string ixfile = fileName + ".ix";
+    string ixfile = fileName;
     // If the file already exists, error
     if (fileExists(ixfile))
         return IX_FILE_EXISTS;
@@ -41,7 +43,7 @@ RC IndexManager::createFile(const string &fileName)
 
 RC IndexManager::destroyFile(const string &fileName)
 {
-    string ixfile = fileName + ".ix";
+    string ixfile = fileName;
     if (remove(ixfile.c_str()) != 0)
         return IX_REMOVE_FAILED;
     return SUCCESS;
@@ -53,7 +55,7 @@ RC IndexManager::openFile(const string &fileName, IXFileHandle &ixfileHandle)
     if (ixfileHandle.getfd() != NULL)
         return IX_HANDLE_IN_USE;
 
-    string ixfile = fileName + ".ix";
+    string ixfile = fileName;
 
     // If the file doesn't exist, error
     if (!fileExists(ixfile.c_str()))
@@ -209,7 +211,36 @@ int IndexManager::findPosition(const Attribute &attribute, const void *key, void
 
 RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid)
 {
-    return -1;
+    void * page = malloc(PAGE_SIZE);
+    int pageNum = findPosition(attribute, key, page);
+
+    if(ixfileHandle.readPage(pageNum, page)){
+        free(page);
+        return IX_FILE_DN_EXIST;
+    }
+    char *ridReset;
+    // Get the mem address where that RID rests.
+
+    if(ridReset == NULL){
+        //IF RID not fund, liberate the page and return error
+        free(page);
+        return IX_ATTR_DN_EXIST;
+
+    }else{
+        //Re assign a new RID dereferencing the previous one.
+        newRID.slotNum= -1;
+        newRID.pageNum= -1;
+        //Write it on the page
+        memcpy(ridReset, newRID, sizeof(RID));
+        if(ixfileHandle.writePage(pageNum, page)){
+            free(page);
+            return IX_FAILED_TO_WRITE;
+        }
+        //If write pass, done. Exit with success.
+        free(page);
+        return SUCCESS;
+    }
+
 }
 
 bool IndexManager::fileExists(const string &fileName)

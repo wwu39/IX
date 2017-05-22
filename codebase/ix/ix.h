@@ -18,6 +18,7 @@
 #define IX_FILE_NOT_OPEN 6
 
 #define IX_ATTR_MISMATCH 7
+#define IX_KEY_NOT_FOUND 8
 
 typedef struct
 {
@@ -144,10 +145,10 @@ class IX_ScanIterator {
         const void *highKey;
         bool lowKeyInclusive;
         bool highKeyInclusive;
-        int LowPageNum;
         int highPageNum;
         int currentPage;
         int currentEntryOffset;
+        int limitOffset;
 
 
         // private method
@@ -161,6 +162,9 @@ class IX_ScanIterator {
         //Helper functions created by Daniel
     int setLowKeyPageNum();
     int setHighKeyPageNum();
+    int searchKey(IXFileHandle &ixfileHandle, int pageNum, int &pageKeyNum, int &offset);
+    int searchLeftEnd(IXFileHandle &ixfileHandle, int pageNum, int &pageKeyNum, int &offset);
+    int searchRightEnd(IXFileHandle &ixfileHandle, int pageNum, int &pageKeyNum, int &offset);
 
     //-----
         

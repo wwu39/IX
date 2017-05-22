@@ -438,10 +438,62 @@ int IndexManager::getRoot(IXFileHandle &ixfileHandle)
 
  int IX_ScanIterator::setLowKeyPageNum()
  {
-     return -1;
+     if(this->ixfileHandle.getNumberOfPages()== 0)
+        return -1; // There is no pages
+
+     int rootPageNum = IndexManager::getRoot(this->ixfileHandle);
+     void * data = malloc(PAGE_SIZE);
+     if(this->ixfileHandle.readPage(rootPageNum,data))
+        return RBFM_READ_FAILED;
+
+     if(this->lowKey != NULL)
+     {
+         if(searchKey(ixfileHandle,rootPageNum,this->currentPage,this->currentEntryOffset))
+            return IX_KEY_NOT_FOUND; // KEY NOT FOUND
+     }
+     else{
+         if(searchLeftEnd(ixfileHandle,rootPageNum,this->currentPage,this->currentEntryOffset))
+            return IX_KEY_NOT_FOUND;
+     }
+    
+    return SUCCESS;
  }
 
  int IX_ScanIterator::setHighKeyPageNum()
+ {
+     if(this->ixfileHandle.getNumberOfPages()== 0)
+        return -1; // There is no pages
+
+     int rootPageNum = IndexManager::getRoot(this->ixfileHandle);
+     void * data = malloc(PAGE_SIZE);
+     if(this->ixfileHandle.readPage(rootPageNum,data))
+        return RBFM_READ_FAILED;
+
+     if(this->highKey != NULL)
+     {
+         if(searchKey(ixfileHandle,rootPageNum,this->highPageNum,this->limitOffset))
+            return IX_KEY_NOT_FOUND; // KEY NOT FOUND
+     }
+     else{
+         if(searchRightEnd(ixfileHandle,rootPageNum,this->currentPage,this->limitOffset))
+            return IX_KEY_NOT_FOUND;
+     }
+    
+    return SUCCESS;
+ }
+
+ int IX_ScanIterator::searchKey(IXFileHandle &ixfileHandle, int pageNum, int &pageKeyNum, int &offset)
+ {
+     void* data = malloc(PAGE_SIZE);
+     return -1;
+ }
+
+ int IX_ScanIterator::searchLeftEnd(IXFileHandle &ixfileHandle, int pageNum, int &pageKeyNum, int &offset)
+ {
+     return -1;
+ }
+
+ int IX_ScanIterator::searchRightEnd(IXFileHandle &ixfileHandle, int pageNum, int &pageKeyNum, int &offset)
  {
      return -1;
  }

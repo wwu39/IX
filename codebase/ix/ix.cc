@@ -237,14 +237,13 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
         this->entry_number_low_key = 1;
         this->currentPage = currentPageHeader.next;
         this->currentEntryOffset = 0;
+    }
 
-        if(this->currentPage == this->highPageNum)
-        {
+    if(this->currentPage == this->highPageNum)
+      {
             if(this->entry_number_low_key > this->entry_number_high_key )
                 return SUCCESS;
-        }
-
-    }
+      }
    
         if(readEntry(rid,key))
             return FH_READ_FAILED;

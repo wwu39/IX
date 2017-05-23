@@ -243,18 +243,14 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
             if(this->entry_number_low_key > this->entry_number_high_key )
                 return SUCCESS;
         }
-        
-        if(readEntry(rid,key))
-            return FH_READ_FAILED;
-        this->entry_number_low_key++;
 
     }
-    else{
+   
         if(readEntry(rid,key))
             return FH_READ_FAILED;
 
         this->entry_number_low_key++;
-    }
+    
     
     return SUCCESS;
 }

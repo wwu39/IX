@@ -166,7 +166,7 @@ class IX_ScanIterator {
         //Helper functions created by Daniel
     int setLowKeyPageNum();
     int setHighKeyPageNum();
-    int searchKey(IXFileHandle &ixfileHandle, int pageNum, int &offset, int entryNumber, void* page);
+    int searchKey(IXFileHandle &ixfileHandle, int pageNum, int &offset, int &entryNumber, void* page);
     int searchLeftEnd(IXFileHandle &ixfileHandle, int pageNum, int &pageKeyNum, int &offset, int &entryNumber);
     int searchRightEnd(IXFileHandle &ixfileHandle, int pageNum, int &pageKeyNum, int &offset, int &entryNumber);
     RC readEntry(RID &rid, void *key);

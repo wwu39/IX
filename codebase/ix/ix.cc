@@ -236,6 +236,7 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
     {
         this->entry_number_low_key = 1;
         this->currentPage = currentPageHeader.next;
+        this->currentEntryOffset = 0;
 
         if(this->currentPage == this->highPageNum)
         {

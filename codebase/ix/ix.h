@@ -86,8 +86,22 @@ class IndexManager {
         void initIXfile(const Attribute& attr, IXFileHandle &ixfileHandle);
         bool checkIXAttribute(const Attribute& attr, IXFileHandle &ixfileHandle);
         int findPosition(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, void *page);
-        void insertEntryToPage(const Attribute &attribute, const void *key, const RID &rid, void *page);
 
+        // insert helper
+        void insertEntryToPage(const Attribute &attribute, const void *key, const RID &rid, void *page);
+        void insertEntryToPage(const Attribute &attribute, const void *key, int pointer, void *page);
+        int findKeyPos(const Attribute &attribute, const void *key, Entry& entry, const void *page);
+        void prepareDoublePage(const void * page, const Attribute &attribute, const void *key, const RID& rid, void * doublepage);
+        void prepareDoublePage(const void * page, const Attribute &attribute, const void *key, int pointer, void * doublepage);
+        void splitPages(void * oldPage, void* newPage, const Attribute &attribute, const void *key, const RID &rid, void * pivot);
+        void splitPages(void * oldPage, void* newPage, const Attribute &attribute, const void *key, int pointer, void * pivot);
+        void splitAncestors(int leftChild, const Attribute &attribute, const void * pivot, int pointer, IXFileHandle &ixfileHandle, const int parent);
+
+        // general helper
+        int keyCompare(const Attribute& attr, const void * key1, const void * key2);
+        void setRoot(IXFileHandle &ixfileHandle, int pageNum);
+        void setParent(IXFileHandle &ixfileHandle, int child, int parent);
+        void newNonLeafPage(int left, const Attribute &attribute, const void * key, int right, void * page);
         int getPageFreeSpaceSize(const void * page);
         IX_SlotDirectoryHeader getPageHeader(const void * page);
         void setPageHeader(void * page, const IX_SlotDirectoryHeader& header);

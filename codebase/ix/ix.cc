@@ -222,33 +222,34 @@ bool IndexManager::fileExists(const string &fileName)
 //-- SCAN FUNCTION -------------------------------------------------------------------------------------------
 //------------------------------------------------------------------------------------------------------------
 //------------------------------------------------------------------------------------------------------
-
+//Changes added to design :
+//I added a new field in the slotDirectoryHeader struct to keep track of the the page before in the linked list
 
 RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
 {
-    void* page = malloc(PAGE_SIZE);
+    void* page = malloc(PAGE_SIZE);                             // Read the currentPage. All of this was initialized by the SCAN function
     if(ixfileHandle.readPage(this->currentPage,page))
-        return FH_READ_FAILED;
+        return FH_READ_FAILED;   
 
     IX_SlotDirectoryHeader currentPageHeader = IndexManager::getPageHeader(page);
 
-    if(currentPageHeader.N < this->entry_number_low_key)
+    if(currentPageHeader.N < this->entry_number_low_key)   // entry_number_low_key keeps track of where we are in the page. This field was initialized by SCAN
     {
-        this->entry_number_low_key = 1;
-        this->currentPage = currentPageHeader.next;
-        this->currentEntryOffset = 0;
+        this->entry_number_low_key = 1;        // if N<entry_number_low_key, it means we crossed the boundary. so we reset entry_number_low_key
+        this->currentPage = currentPageHeader.next; //go to the next page
+        this->currentEntryOffset = 0; // reset the currentEntryOffset
     }
 
-    if(this->currentPage == this->highPageNum)
+    if(this->currentPage == this->highPageNum) // if we are in the last page of the range search
       {
-            if(this->entry_number_low_key > this->entry_number_high_key )
+            if(this->entry_number_low_key > this->entry_number_high_key ) // if we crossed he boundary regarding the last page, return
                 return SUCCESS;
       }
    
-        if(readEntry(rid,key))
+        if(readEntry(rid,key))   // read Entry. This functions sets up all variables for the next iteration
             return FH_READ_FAILED;
 
-        this->entry_number_low_key++;
+        this->entry_number_low_key++;   //next key
     
     
     return SUCCESS;
@@ -353,14 +354,14 @@ RC IX_ScanIterator::scanInit(IXFileHandle &ixfileHandle,
     void * page = malloc(PAGE_SIZE);
      if(this->lowKey != NULL)
      {
-         if(this->currentPage = IndexManager::findPosition(ixfileHandle,attribute,this->lowKey,page)<0)
+         if(this->currentPage = IndexManager::findPosition(ixfileHandle,attribute,this->lowKey,page)<0) // find the page where the key lives
             return IX_KEY_NOT_FOUND;
 
-         if(searchKey(ixfileHandle,this->currentPage,this->currentEntryOffset, this->entry_number_low_key, page))
+         if(searchKey(this->lowKey,this->lowKeyInclusive,this->currentEntryOffset,this->entry_number_low_key,page,0)) // searchKey in the page and sets up the iterative variable properly
             return IX_KEY_NOT_FOUND; // KEY NOT FOUND
      }
      else{
-         if(searchLeftEnd(ixfileHandle,rootPageNum,this->currentPage,this->currentEntryOffset, this->entry_number_low_key))
+         if(searchLeftEnd())  // Find the left end and sets up the iterative variables properly
             return IX_KEY_NOT_FOUND;
      }
     
@@ -383,30 +384,118 @@ RC IX_ScanIterator::scanInit(IXFileHandle &ixfileHandle,
           if(this->highPageNum = IndexManager::findPosition(ixfileHandle,attribute,this->highKey,page)<0)
             return IX_KEY_NOT_FOUND;
 
-         if(searchKey(ixfileHandle,this->currentPage,this->limitOffset, this->entry_number_high_key,page))
+         if(searchKey(this->highKey,this->highKeyInclusive,this->limitOffset,this->entry_number_high_key,page,1))
             return IX_KEY_NOT_FOUND; // KEY NOT FOUND
      }
      else{
-         if(searchRightEnd(ixfileHandle,rootPageNum,this->currentPage,this->limitOffset, this->entry_number_high_key))
+         if(searchRightEnd()) // find right end and sets up the iterative variables properly
             return IX_KEY_NOT_FOUND;
      }
     
     return SUCCESS;
  }
 
- int IX_ScanIterator::searchKey(IXFileHandle &ixfileHandle, int pageNum, int &offset, int &entryNumber, void* page)
+ int IX_ScanIterator::searchKey(const void* key, bool inclusive, int &offset, int &entry_number, void* page, int leftOrRight)  // search key in the page
  {
+     IX_SlotDirectoryHeader currentPageHeader = IndexManager::getPageHeader(page);
+     int current_offset = 0;
+     bool key_exists = false;
+     
+     for(unsigned i=1; i<=currentPageHeader.N;i++) // iterate thorugh all the entries in the page
+     {
+
+       if(this->attribute.type == TypeInt) // check for the attribute
+        {
+        uint32_t int_key;
+        uint32_t current_int_key;
+        memcpy(&int_key,key,INT_SIZE);  //get the actual value of key
+        memcpy(&current_int_key,(char *)page+current_offset,INT_SIZE); // get the actual value of the current key in the page
+
+        if(int_key == current_int_key)  // if both keys match then we found it
+        {
+            entry_number = i; // where it is
+            key_exists = true; // it exists
+            offset = current_offset; // where exactly it is
+            if(inclusive == false) // if it's exclusive
+                {
+                    handleInclusion(key,current_offset,offset,entry_number,page,leftOrRight); //handle exclusion
+                }
+
+            break;
+        }
+        current_offset = current_offset + INT_SIZE + sizeof(RID); // iterate thorugh the page. Get the address of the next entry
+
+        }
+        else if(this->attribute.type == TypeReal)  // ->> similar analysis as before
+         {
+             float float_key;
+             float current_float_key;
+
+             memcpy(&float_key,key,REAL_SIZE);
+             memcpy(&current_float_key,(char *)page+current_offset,REAL_SIZE);
+
+             if(float_key == current_float_key)
+             {
+                 entry_number = i;
+                 key_exists = true;
+                 offset = current_offset;
+                 if(inclusive == false)
+                 {
+                    handleInclusion(key,current_offset,offset,entry_number,page,leftOrRight);
+                 }
+
+                 break;
+             }
+        
+             current_offset = current_offset + REAL_SIZE + sizeof(RID);
+         }
+        else if(this->attribute.type == TypeVarChar)
+         {
+             uint32_t var_size_key;
+             uint32_t var_size_current_key;
+
+             memcpy(&var_size_key,key,4);
+             memcpy(&var_size_current_key,(char *)page+current_offset,4);
+
+             char* char_key = (char*)malloc(var_size_key+1);
+             char* current_char_key = (char *)malloc(var_size_current_key+1);
+
+             memcpy(char_key,(char*)key+4,var_size_key);
+             memcpy(current_char_key,(char *)page+current_offset+4,var_size_current_key);
+
+             char_key[var_size_key] = '\0';
+             current_char_key[var_size_current_key] = '\0';
+
+             if(strcmp(char_key,current_char_key)==0)
+             {
+                 entry_number = i;
+                 key_exists = true;
+                 offset = current_offset;
+                 if(inclusive == false)
+                 {
+                     handleInclusion(key,current_offset,offset,entry_number,page,leftOrRight);
+                 }
+                 break;
+             }
+             
+             current_offset = current_offset + 4 + var_size_current_key + sizeof(RID);
+         }
+
+     }
+
+     if(key_exists == false)
+        return -1;
      
 
-     return -1;
+     return SUCCESS;
  }
 
- int IX_ScanIterator::searchLeftEnd(IXFileHandle &ixfileHandle, int pageNum, int &pageKeyNum, int &offset, int &entryNumber)
+ int IX_ScanIterator::searchLeftEnd()
  {
      return -1;
  }
 
- int IX_ScanIterator::searchRightEnd(IXFileHandle &ixfileHandle, int pageNum, int &pageKeyNum, int &offset, int &entryNumber)
+ int IX_ScanIterator::searchRightEnd()
  {
      return -1;
  }
@@ -443,6 +532,11 @@ RC IX_ScanIterator::readEntry(RID &rid, void *key)
         memcpy(&rid,(char *)data+currentEntryOffset,sizeof(RID));
         currentEntryOffset+=sizeof(RID);
     }
+}
+
+int IX_ScanIterator::handleInclusion(const void* key, int currentOffset,int &offset, int &entry_number, void* page, int leftOrRight)
+{
+    return -1;
 }
 
 

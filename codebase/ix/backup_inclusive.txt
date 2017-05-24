@@ -1,0 +1,31 @@
+current_offset = current_offset+REAL_SIZE+sizeof(RID);
+                    for(unsigned j = i+1; j<=currentPageHeader.N; i++)
+                        {
+                            memcpy(&current_int_key,(char *)page+current_offset,REAL_SIZE);
+                            if(current_float_key != float_key)
+                            {
+                                entry_number = j;
+                                offset = current_offset;
+                                break;
+                            }
+                            current_offset = current_offset+INT_SIZE+sizeof(RID);
+                        }
+
+
+
+//-----char
+current_offset = current_offset+var_size_current_key+sizeof(RID);
+                    for(unsigned j = i+1; j<=currentPageHeader.N; i++)
+                        {
+                            memcpy(&var_size_current_key,(char *)page+current_offset,4);
+                            char* current_char_key_ninclusive = (char *)malloc(var_size_current_key+1);
+                             current_char_key_ninclusive[var_size_current_key] = '\0';
+
+                            if(strcmp(char_key,current_char_key_ninclusive)!=0)
+                            {
+                                entry_number = j;
+                                offset = current_offset;
+                                break;
+                            }
+                            current_offset = current_offset + 4 + var_size_current_key + sizeof(RID);
+                        }

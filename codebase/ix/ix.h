@@ -26,6 +26,7 @@ typedef struct
     uint16_t N; // number of k-v pairs
     uint8_t leaf; // is this page a leaf page? 0 = no
     int32_t next; // if it's a leaf page, what's the next leaf?
+    int32_t before; // if it's a leaf page, what's before the leaf
 } IX_SlotDirectoryHeader;
 
 typedef struct
@@ -166,10 +167,11 @@ class IX_ScanIterator {
         //Helper functions created by Daniel
     int setLowKeyPageNum();
     int setHighKeyPageNum();
-    int searchKey(IXFileHandle &ixfileHandle, int pageNum, int &offset, int &entryNumber, void* page);
-    int searchLeftEnd(IXFileHandle &ixfileHandle, int pageNum, int &pageKeyNum, int &offset, int &entryNumber);
-    int searchRightEnd(IXFileHandle &ixfileHandle, int pageNum, int &pageKeyNum, int &offset, int &entryNumber);
+    int searchKey(const void* key, bool inclusive, int &offset, int &entry_number, void* page, int leftOrRight);
+    int searchLeftEnd();
+    int searchRightEnd();
     RC readEntry(RID &rid, void *key);
+    int handleInclusion(const void* key,int currentOffset,int &offset, int &entry_number, void* page, int leftOrRight);
 
 
     //-----

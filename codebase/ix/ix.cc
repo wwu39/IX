@@ -24,13 +24,12 @@ IndexManager::~IndexManager()
 
 RC IndexManager::createFile(const string &fileName)
 {
-    string ixfile = fileName + ".ix";
     // If the file already exists, error
-    if (fileExists(ixfile))
+    if (fileExists(fileName))
         return IX_FILE_EXISTS;
 
     // Attempt to open the file for writing
-    FILE *pFile = fopen(ixfile.c_str(), "wb");
+    FILE *pFile = fopen(fileName.c_str(), "wb");
     // Return an error if we fail
     if (pFile == NULL)
         return IX_OPEN_FAILED;
@@ -41,8 +40,7 @@ RC IndexManager::createFile(const string &fileName)
 
 RC IndexManager::destroyFile(const string &fileName)
 {
-    string ixfile = fileName + ".ix";
-    if (remove(ixfile.c_str()) != 0)
+    if (remove(fileName.c_str()) != 0)
         return IX_REMOVE_FAILED;
     return SUCCESS;
 }
@@ -53,15 +51,13 @@ RC IndexManager::openFile(const string &fileName, IXFileHandle &ixfileHandle)
     if (ixfileHandle.getfd() != NULL)
         return IX_HANDLE_IN_USE;
 
-    string ixfile = fileName + ".ix";
-
     // If the file doesn't exist, error
-    if (!fileExists(ixfile.c_str()))
+    if (!fileExists(fileName.c_str()))
         return PFM_FILE_DN_EXIST;
     
     // Open the file for reading/writing in binary mode
     FILE *pFile;
-    pFile = fopen(ixfile.c_str(), "rb+");
+    pFile = fopen(fileName.c_str(), "rb+");
     // If we fail, error
     if (pFile == NULL) return IX_OPEN_FAILED;
 
@@ -126,12 +122,11 @@ RC IndexManager::insertEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
         setPageHeader(newPage, newHeader);
         ixfileHandle.writePage(targetPageNum, page);
         ixfileHandle.writePage(newPageNum, newPage);
-
+        free(newPage);
         // recursively split ancestors, create new pages if necesasary
         // return the parent of new page
         splitAncestors(targetPageNum, attribute, pivot, newPageNum, ixfileHandle, oldHeader.parent);
 
-        free(newPage);
     }
     free(page);
     return SUCCESS;
@@ -183,10 +178,10 @@ void IndexManager::splitAncestors(int leftChild, const Attribute &attribute, con
         if (keyCompare(attribute, newPivot, pivot) <= 0) 
             setParent(ixfileHandle, pointer, newPageNum);
         else setParent(ixfileHandle, pointer, parent);
-        splitAncestors(parent, attribute, newPivot, newPageNum, ixfileHandle, oldHeader.parent);
         free(newPage);
-        free(newPivot);
         free(page);
+        splitAncestors(parent, attribute, newPivot, newPageNum, ixfileHandle, oldHeader.parent);
+        free(newPivot);
     }
 }
 
@@ -485,7 +480,7 @@ int IndexManager::findPosition(IXFileHandle &ixfileHandle, const Attribute &attr
 {
     // this function find the leaf page where the key should belong to
     // regardless if the key can be fit in
-    // page number is returned
+    // page number and the page are returned
 
     // start at the root page
     ixfileHandle.readPage(0, page); // read header page
@@ -543,8 +538,9 @@ int IndexManager::findPosition(IXFileHandle &ixfileHandle, const Attribute &attr
 
 void IndexManager::insertEntryToPage(const Attribute &attribute, const void *key, const RID &rid, void *page)
 {
+    // insert entry (key, rid) to a leaf page
     Entry entry;
-    int i = findKeyPos(attribute, key, entry, page); // index
+    int i = findKeyPos(attribute, key, entry, page, true); // index
     int start = entry.offset; // start of the the inserted (key, rid)
     int attrSize = getAttrSize(attribute, key);
     int length = attrSize + sizeof(RID); // length of the inserted (key, rid)
@@ -567,8 +563,8 @@ void IndexManager::insertEntryToPage(const Attribute &attribute, const void *key
         // shift entries
         bytesToShift = (header.N - i) * sizeof(Entry);
         void * temp2 = malloc(bytesToShift);
-        memcpy(temp2, (char *)page + PAGE_SIZE - header.N * sizeof(Entry), bytesToShift);
-        memcpy((char *)page + PAGE_SIZE - (header.N + 1) * sizeof(Entry), temp, bytesToShift);
+        memcpy(temp2, (char *)page + PAGE_SIZE - header.N * sizeof(Entry) - sizeof(IX_SlotDirectoryHeader), bytesToShift);
+        memcpy((char *)page + PAGE_SIZE - (header.N + 1) * sizeof(Entry) - sizeof(IX_SlotDirectoryHeader), temp, bytesToShift);
         free(temp2);
     }
     // insert
@@ -587,8 +583,9 @@ void IndexManager::insertEntryToPage(const Attribute &attribute, const void *key
 
 void IndexManager::insertEntryToPage(const Attribute &attribute, const void *key, int pointer, void *page)
 {
+    // insert entry (key, pointer) to a nonleaf page
     Entry entry;
-    int i = findKeyPos(attribute, key, entry, page); // index
+    int i = findKeyPos(attribute, key, entry, page, false); // index
     int start = entry.offset; // start of the the inserted (key, pointer)
     int attrSize = getAttrSize(attribute, key);
     int length = attrSize + sizeof(int); // length of the inserted (key, pointer)
@@ -610,8 +607,8 @@ void IndexManager::insertEntryToPage(const Attribute &attribute, const void *key
         // shift entries
         bytesToShift = (header.N - i) * sizeof(Entry);
         void * temp2 = malloc(bytesToShift);
-        memcpy(temp2, (char *)page + PAGE_SIZE - header.N * sizeof(Entry), bytesToShift);
-        memcpy((char *)page + PAGE_SIZE - (header.N + 1) * sizeof(Entry), temp, bytesToShift);
+        memcpy(temp2, (char *)page + PAGE_SIZE - header.N * sizeof(Entry) - sizeof(IX_SlotDirectoryHeader), bytesToShift);
+        memcpy((char *)page + PAGE_SIZE - (header.N + 1) * sizeof(Entry) - sizeof(IX_SlotDirectoryHeader), temp, bytesToShift);
         free(temp2);
     }
     // insert
@@ -628,7 +625,7 @@ void IndexManager::insertEntryToPage(const Attribute &attribute, const void *key
     setPageHeader(page, header);
 }
 
-int IndexManager::findKeyPos(const Attribute &attribute, const void *key, Entry& entry, const void *page)
+int IndexManager::findKeyPos(const Attribute &attribute, const void *key, Entry& entry, const void *page, bool leaf)
 {
     // this function find where a inserted key in a page should be
     // return entry of the first (key, rid) that's larger and it's index
@@ -636,10 +633,11 @@ int IndexManager::findKeyPos(const Attribute &attribute, const void *key, Entry&
     IX_SlotDirectoryHeader header = getPageHeader(page);
     // leaf page format:
     // |K0|RID0|K1|RID1|...|slotDir|header|
+    // non-leaf page format:
+    // |P0|K1|P1|K2|P2|...|slotDir|header|
     // loop through to find the correct spot
     // find the first key that's larger than search key
-    // that key and anything behind are shifted
-    uint16_t i = 0;
+    uint16_t i = leaf ? 0 : 1;
     for (; i < header.N; ++i) {
         entry = getEntry(i, page);
         if (attribute.type == TypeInt) {
@@ -946,8 +944,126 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle,
 //                                                                PRINT                                                            **
 //***********************************************************************************************************************************
 void IndexManager::printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute) const {
+    int numOfPage = ixfileHandle.getNumberOfPages();
+    if (numOfPage == 0) { nothing there
+        cout << "{}" << endl;
+        return;
+    } else {
+        // check attribute
+        if (checkIXAttribute(attribute, ixfileHandle)){
+            cout << "Error: Attribute mismatched" << endl;
+            return;
+        }
+    }
+    void * page = malloc(PAGE_SIZE);
+    ixfileHandle.readPage(0, page);
+    int root;
+    memcpy(&root, page, sizeof(int));
+    free(page);
+    DFSPrint(ixfileHandle, attribute, root, 0);
 }
 
+void IndexManager::DFSPrint(IXFileHandle &ixfileHandle, const Attribute &attribute, int curPage, int depth)
+{
+    /*
+    void * page = malloc(PAGE_SIZE);
+    ixfileHandle.readPage(curPage, page);
+    IX_SlotDirectoryHeader header = getPageHeader(page);
+    if(header.leaf == 1) {
+        for(uint16_t i = 0; i < header.N; ++i) {
+            Entry entry = getEntry(i, page);
+            switch (attribute.type) {
+                case TypeInt: 
+                {
+                    int key;
+                    memcpy(&key, (char *)page + entry.offset, INT_SIZE);
+                    RID rid;
+                    memcpy(&rid, (char *)page + entry.offset + INT_SIZE, sizeof(RID));
+                    cout << "\"" << key << " : [(" << rid.pageNum << ", " << rid.slotNum << ")]"; 
+                    if (i != header.N) << ",";
+                }
+                case TypeReal: 
+                {
+                    float key;
+                    memcpy(&key, (char *)page + entry.offset, REAL_SIZE);
+                    RID rid;
+                    memcpy(&rid, (char *)page + entry.offset + REAL_SIZE, sizeof(RID));
+                    cout << "\"" << key << " : [(" << rid.pageNum << ", " << rid.slotNum << ")]"; 
+                    if (i != header.N) << ",";
+                }
+                case TypeVarChar:
+                {
+                    int vclen;
+                    memcpy(&vclen, (char *)page + entry.offset, 4);
+                    return (vclen + 4);
+                    char key[vclen + 1];
+                    memcpy(key, (char *)page + entry.offset + 4, vclen);
+                    key[vclen] = '\0';
+                    RID rid;
+                    memcpy(&rid, (char *)page + entry.offset + 4 + vclen, sizeof(RID));
+                    cout << "\"" << key << " : [(" << rid.pageNum << ", " << rid.slotNum << ")]"; 
+                    if (i != header.N) << ",";
+                }
+            }
+        }
+        cout << endl;
+    } else {
+        vector<int> pointers;
+        cout << "{\"keys\" : ["
+        for(uint16_t i = 0; i < header.N; ++i) {
+            Entry entry = getEntry(i, page);
+            switch (attribute.type) {
+                case TypeInt: 
+                {
+                    int key;
+                    memcpy(&key, (char *)page + entry.offset, INT_SIZE);
+                    int pointer;
+                    memcpy(&pointer, (char *)page + entry.offset + INT_SIZE, sizeof(int));
+                    pointers.push_back(pointer);
+                    cout << "\"" << key << "\""; 
+                    if (i != header.N) << ",";
+                }
+                case TypeReal: 
+                {
+                    float key;
+                    memcpy(&key, (char *)page + entry.offset, REAL_SIZE);
+                    int pointer;
+                    memcpy(&pointer, (char *)page + entry.offset + REAL_SIZE, sizeof(int));
+                    pointers.push_back(pointer);
+                    cout << "\"" << key << "\""; 
+                    if (i != header.N) << ",";
+                }
+                case TypeVarChar:
+                {
+                    int vclen;
+                    memcpy(&vclen, key, 4);
+                    return (vclen + 4);
+                    char key[vclen + 1];
+                    memcpy(key, (char *)page + entry.offset, vclen);
+                    key[vclen] = '\0';
+                    int pointer;
+                    memcpy(&pointer, (char *)page + entry.offset + 4 + vclen, sizeof(int));
+                    pointers.push_back(pointer);
+                    cout << "\"" << key << "\"";
+                    if (i != header.N) << ",";
+                }
+            }
+        }
+        cout << "]," << endl;
+        for (size_t j = 0; j < pointers.size(); ++i) {
+            cout << "\"children\": ["
+            DFSPrint(ixfileHandle, attribute, pointers[j], ++depth);
+            cout << "]}"
+        }
+    }
+    */
+}
+
+// for debugging
+void IndexManager::printPage(IXFileHandle &ixfileHandle, const Attribute &attribute, int pageNum)
+{
+    
+}
 
 //***********************************************************************************************************************************
 //                                                        SCAN_ITERATOR_CLASS                                                      **

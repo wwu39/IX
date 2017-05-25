@@ -85,7 +85,7 @@ class IndexManager {
         bool fileExists(const string &fileName);
         void initIXfile(const Attribute& attr, IXFileHandle &ixfileHandle);
         bool checkIXAttribute(const Attribute& attr, IXFileHandle &ixfileHandle);
-        int findPosition(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, void *page);
+        int findPosition(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, void *page, bool leaf);
 
         // insert helper
         void insertEntryToPage(const Attribute &attribute, const void *key, const RID &rid, void *page);
@@ -96,6 +96,9 @@ class IndexManager {
         void splitPages(void * oldPage, void* newPage, const Attribute &attribute, const void *key, const RID &rid, void * pivot);
         void splitPages(void * oldPage, void* newPage, const Attribute &attribute, const void *key, int pointer, void * pivot);
         void splitAncestors(int leftChild, const Attribute &attribute, const void * pivot, int pointer, IXFileHandle &ixfileHandle, const int parent);
+
+        // print helper
+        void DFSPrint(IXFileHandle &ixfileHandle, const Attribute &attribute, int curPage, int depth);
 
         // general helper
         int keyCompare(const Attribute& attr, const void * key1, const void * key2);

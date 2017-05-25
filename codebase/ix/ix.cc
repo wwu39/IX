@@ -943,9 +943,9 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle,
 //***********************************************************************************************************************************
 //                                                                PRINT                                                            **
 //***********************************************************************************************************************************
-void IndexManager::printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute) const {
+void IndexManager::printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute) {
     int numOfPage = ixfileHandle.getNumberOfPages();
-    if (numOfPage == 0) { nothing there
+    if (numOfPage == 0) { //nothing there
         cout << "{}" << endl;
         return;
     } else {
@@ -1036,10 +1036,10 @@ void IndexManager::DFSPrint(IXFileHandle &ixfileHandle, const Attribute &attribu
                 case TypeVarChar:
                 {
                     int vclen;
-                    memcpy(&vclen, key, 4);
+                    memcpy(&vclen, (char *)page + entry.offset, 4);
                     return (vclen + 4);
                     char key[vclen + 1];
-                    memcpy(key, (char *)page + entry.offset, vclen);
+                    memcpy(key, (char *)page + entry.offset + 4, vclen);
                     key[vclen] = '\0';
                     int pointer;
                     memcpy(&pointer, (char *)page + entry.offset + 4 + vclen, sizeof(int));
@@ -1062,7 +1062,52 @@ void IndexManager::DFSPrint(IXFileHandle &ixfileHandle, const Attribute &attribu
 // for debugging
 void IndexManager::printPage(IXFileHandle &ixfileHandle, const Attribute &attribute, int pageNum)
 {
-    
+    cout << "-----------------------------PAGE" << pageNum << "-----------------------------" << endl;
+    void * page = malloc(PAGE_SIZE);
+    ixfileHandle.readPage(pageNum, page);
+    IX_SlotDirectoryHeader header = getPageHeader(page);
+    cout << "FSOffset " << header.FS << " : N " << header. N << " : Leaf? " 
+        << header.leaf << " : Next " << header.next << " : Parent " << header.parent << endl;
+    for (uint16_t i = 0; i < header.N; ++i) {
+        Entry entry = getEntry(i, page);
+        cout << "Slot " << i << ": Offset " << entry.offset <<": Length " << entry.length << ": ";
+        int offset = 0;
+        switch (attribute.type) {
+            case TypeInt: 
+            {
+                int key;
+                memcpy(&key, (char *)page + entry.offset, INT_SIZE);
+                offset += INT_SIZE;
+                cout << "|" << key;
+            }
+            case TypeReal: 
+            {
+                float key;
+                memcpy(&key, (char *)page + entry.offset, REAL_SIZE);
+                offset += REAL_SIZE;
+                cout << "|" << key;
+            }
+            case TypeVarChar:
+            {
+                int vclen;
+                memcpy(&vclen, (char *)page + entry.offset, 4);
+                char key[vclen + 1];
+                memcpy(key, (char *)page + entry.offset + 4, vclen);
+                key[vclen] = '\0';
+                offset += (4 + vclen);
+                cout << "|" << key;
+            }
+            if (header.leaf) {
+                int pointer;
+                memcpy(&pointer, (char *)page + offset, sizeof(int));
+                cout << "|" << pointer << ">|" << endl;
+            } else {
+                RID rid;
+                memcpy(&rid, (char *)page + offset, sizeof(RID));
+                cout << "|" << rid.pageNum << "," << rid.slotNum << "|" << endl;
+            }
+        }
+    }
 }
 
 //***********************************************************************************************************************************

@@ -73,7 +73,10 @@ class IndexManager {
                 IX_ScanIterator &ix_ScanIterator);
 
         // Print the B+ tree in pre-order (in a JSON record format)
-        void printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute) const;
+        void printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute);
+
+        // for debug
+        void printPage(IXFileHandle &ixfileHandle, const Attribute &attribute, int pageNum);
 
     protected:
         IndexManager();
@@ -85,12 +88,12 @@ class IndexManager {
         bool fileExists(const string &fileName);
         void initIXfile(const Attribute& attr, IXFileHandle &ixfileHandle);
         bool checkIXAttribute(const Attribute& attr, IXFileHandle &ixfileHandle);
-        int findPosition(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, void *page, bool leaf);
+        int findPosition(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, void *page);
 
         // insert helper
         void insertEntryToPage(const Attribute &attribute, const void *key, const RID &rid, void *page);
         void insertEntryToPage(const Attribute &attribute, const void *key, int pointer, void *page);
-        int findKeyPos(const Attribute &attribute, const void *key, Entry& entry, const void *page);
+        int findKeyPos(const Attribute &attribute, const void *key, Entry& entry, const void *page, bool leaf);
         void prepareDoublePage(const void * page, const Attribute &attribute, const void *key, const RID& rid, void * doublepage);
         void prepareDoublePage(const void * page, const Attribute &attribute, const void *key, int pointer, void * doublepage);
         void splitPages(void * oldPage, void* newPage, const Attribute &attribute, const void *key, const RID &rid, void * pivot);

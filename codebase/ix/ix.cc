@@ -174,6 +174,7 @@ void IndexManager::splitAncestors(int leftChild, const Attribute &attribute, con
         IX_SlotDirectoryHeader oldHeader = getPageHeader(page);
         ixfileHandle.writePage(parent, page);
         ixfileHandle.writePage(newPageNum, newPage);
+        // set parents of the children
         setParent(ixfileHandle, leftChild, parent);
         if (keyCompare(attribute, newPivot, pivot) <= 0) 
             setParent(ixfileHandle, pointer, newPageNum);
@@ -230,38 +231,51 @@ void IndexManager::splitPages(void * oldPage, void* newPage, const Attribute &at
     char * lower = (char *)doublepage + PAGE_SIZE;
 
     IX_SlotDirectoryHeader header = getPageHeader(lower);
-    Entry entry; // pivot entry
-    // then find the pivot
-    uint16_t i = 0; // pivot index
-    for(; i < header.N; ++i) {
-        entry = getEntry(i, lower);
+    Entry pivotEntry;
+    int pivotIndex;
+    for(uint16_t i = 0; i < header.N; ++i) {
+        Entry entry = getEntry(i, lower);
         if (entry.offset >= PAGE_SIZE / 2) {
             memcpy(pivot, upper + entry.offset, entry.length - sizeof(RID)); // we don't need the rid
+            pivotEntry = entry;
+            pivotIndex = i;
             break;
         }
     }
 
     // split pages
     // oldPage
-    memcpy(oldPage, upper, entry.offset); // copy everything before the pivot to oldPage
+    memcpy(oldPage, upper, pivotEntry.offset); // copy everything before the pivot to oldPage
     memcpy((char *)oldPage + PAGE_SIZE - header.N * sizeof(Entry) - sizeof(IX_SlotDirectoryHeader),
                      lower + PAGE_SIZE - header.N * sizeof(Entry) - sizeof(IX_SlotDirectoryHeader), 
                      header.N * sizeof(Entry)); // copy slotDir
     // update header
     IX_SlotDirectoryHeader oldHeader = header;
-    oldHeader.N = i; // pivot isn't in the old page
-    oldHeader.FS = entry.offset;
+    oldHeader.N = pivotIndex; // pivot isn't in the old page
+    oldHeader.FS = pivotEntry.offset; // so FS starts at where pivot starts
+    oldHeader.leaf = 1;
     setPageHeader(oldPage, oldHeader);
+    // no need to update entries
 
     // new page
-    memcpy(newPage, upper + entry.offset, header.FS - entry.offset); // copy everything after the pivot to oldPage
+    memcpy(newPage, upper + pivotEntry.offset, header.FS - pivotEntry.offset); // copy everything after the pivot to newPage
+    // update header
     IX_SlotDirectoryHeader newHeader = header;
-    newHeader.N = header.N - i;
-    newHeader.FS = header.FS - entry.offset;
+    newHeader.N = header.N - pivotIndex;
+    newHeader.FS = header.FS - pivotEntry.offset;
+    newHeader.leaf = 1;
+    setPageHeader(newPage, newHeader);
+    // update entries
+    // only copy pivot and entries after pivot
     memcpy((char *)newPage + PAGE_SIZE - sizeof(IX_SlotDirectoryHeader) - newHeader.N * sizeof(Entry),
             lower + PAGE_SIZE - sizeof(IX_SlotDirectoryHeader) - header.N * sizeof(Entry),
-            newHeader.N * sizeof(Entry)); // copy slotDir
-    setPageHeader(newPage, newHeader);
+            newHeader.N * sizeof(Entry));
+    // each offset is shifted by pivotEntry.offset bytes to the left
+    for (uint16_t j = 0; j < newHeader.N; ++j) {
+        Entry entry = getEntry(j, newPage);
+        entry.offset -= pivotEntry.offset;
+        setEntry(j, entry, newPage);
+    }
     upper = NULL; lower = NULL; free(doublepage);
 }
 
@@ -355,43 +369,58 @@ void IndexManager::splitPages(void * oldPage, void* newPage, const Attribute &at
     char * lower = (char *)doublepage + PAGE_SIZE;
 
     IX_SlotDirectoryHeader header = getPageHeader(lower);
-    Entry entry; // pivot entry
-    // then find the pivot
-    uint16_t i = 0; // pivot index
-    for(; i < header.N; ++i) {
-        entry = getEntry(i, lower);
+    Entry pivotEntry;
+    int pivotIndex;
+    for(uint16_t i = 0; i < header.N; ++i) {
+        Entry entry = getEntry(i, lower);
         if (entry.offset >= PAGE_SIZE / 2) {
             memcpy(pivot, upper + entry.offset, entry.length - sizeof(int)); // we don't need the pointer
+            pivotEntry = entry;
+            pivotIndex = i;
             break;
         }
     }
 
     // split pages
     // oldPage
-    memcpy(oldPage, upper, entry.offset); // copy everything before the pivot to oldPage
+    memcpy(oldPage, upper, pivotEntry.offset); // copy everything before the pivot to oldPage
     memcpy((char *)oldPage + PAGE_SIZE - header.N * sizeof(Entry) - sizeof(IX_SlotDirectoryHeader),
                      lower + PAGE_SIZE - header.N * sizeof(Entry) - sizeof(IX_SlotDirectoryHeader), 
                      header.N * sizeof(Entry)); // copy slotDir
     // update header
     IX_SlotDirectoryHeader oldHeader = header;
-    oldHeader.N = i; // pivot isn't in the old page
-    oldHeader.FS = entry.offset;
+    oldHeader.N = pivotIndex; // pivot isn't in the old page
+    oldHeader.FS = pivotEntry.offset;
+    oldHeader.leaf = 0;
     setPageHeader(oldPage, oldHeader);
+    // no need to update entries
 
     // new page
     // pivot is not copied, only it's pointer is copied as new P0
-    memcpy(newPage, upper + entry.offset + getAttrSize(attribute, pivot), header.FS - entry.offset); // copy everything after the pivot to oldPage
+    int pivotSize = getAttrSize(attribute, pivot);
+    memcpy(newPage, upper + pivotEntry.offset + pivotSize, header.FS - pivotEntry.offset - pivotSize); // copy everything after the pivot to newPage
+    
+    // update header
     IX_SlotDirectoryHeader newHeader = header;
-    newHeader.N = header.N - i;
-    newHeader.FS = header.FS - entry.offset;
+    newHeader.N = header.N - pivotIndex;
+    newHeader.FS = header.FS - pivotEntry.offset - pivotSize;
+    newHeader.leaf = 0;
+    setPageHeader(newPage, newHeader);
+    // update entries
     memcpy((char *)newPage + PAGE_SIZE - sizeof(IX_SlotDirectoryHeader) - newHeader.N * sizeof(Entry),
             lower + PAGE_SIZE - sizeof(IX_SlotDirectoryHeader) - header.N * sizeof(Entry),
             newHeader.N * sizeof(Entry)); // copy slotDir
-    setPageHeader(newPage, newHeader);
-    // set the 0th entry
-    entry.offset = 0;
-    entry.length = sizeof(int);
-    setEntry(0, entry, newPage);
+    // each offset is shifted by pivotEntry.offset bytes to the left
+    // except the 0th one, which contains only a pointer (size 4)
+    for(uint16_t j = 0; j < newHeader.N; ++j) {
+        Entry entry = getEntry(j, newPage);
+        if (j == 0) { // only contains pointers
+            entry.offset = 0;
+            entry.length = sizeof(int);
+        }
+        else entry.offset -= (pivotEntry.offset + pivotSize);
+        setEntry(j, entry, newPage);
+    }
     upper = NULL; lower = NULL; free(doublepage);
 }
 
@@ -848,7 +877,7 @@ RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
         return IX_ATTR_DN_EXIST;
     } else {
         // check attribute
-        if (checkIXAttribute(attribute, ixfileHandle)) return IX_ATTR_MISMATCH;
+        if (!checkIXAttribute(attribute, ixfileHandle)) return IX_ATTR_MISMATCH;
     }
     void * page = malloc(PAGE_SIZE);
     // find the leaf page it belongs to
@@ -950,7 +979,7 @@ void IndexManager::printBtree(IXFileHandle &ixfileHandle, const Attribute &attri
         return;
     } else {
         // check attribute
-        if (checkIXAttribute(attribute, ixfileHandle)){
+        if (!checkIXAttribute(attribute, ixfileHandle)){
             cout << "Error: Attribute mismatched" << endl;
             return;
         }

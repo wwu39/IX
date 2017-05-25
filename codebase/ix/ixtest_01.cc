@@ -27,7 +27,6 @@ RC testCase_1(const string &indexFileName)
     // open index file
     IXFileHandle ixfileHandle;
     rc = indexManager->openFile(indexFileName, ixfileHandle);
-    cout << rc <<endl;
     assert(rc == success && "indexManager::openFile() should not fail.");
 
     // create duplicate index file

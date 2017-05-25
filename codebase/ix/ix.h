@@ -77,6 +77,7 @@ class IndexManager {
 
         // for debug
         void printPage(IXFileHandle &ixfileHandle, const Attribute &attribute, int pageNum);
+        void test(IXFileHandle &ixfileHandle, const Attribute &attribute);
 
     protected:
         IndexManager();
@@ -163,6 +164,7 @@ class IX_ScanIterator {
         const void *highKey;
         bool lowKeyInclusive;
         bool highKeyInclusive;
+        void * page; // current page
 
         // private method
         RC scanInit(IXFileHandle &ixfileHandle,

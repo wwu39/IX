@@ -585,7 +585,7 @@ void IndexManager::insertEntryToPage(const Attribute &attribute, const void *key
 {
     // insert entry (key, rid) to a leaf page
     Entry entry;
-    int i = findKeyPos(attribute, key, entry, page, true); // index
+    const int i = findKeyPos(attribute, key, entry, page, true); // index
     int start = entry.offset; // start of the the inserted (key, rid)
     int attrSize = getAttrSize(attribute, key);
     int length = attrSize + sizeof(RID); // length of the inserted (key, rid)
@@ -599,17 +599,17 @@ void IndexManager::insertEntryToPage(const Attribute &attribute, const void *key
         // copy shifted bytes
         memcpy((char*)page + start + length, temp, bytesToShift);
         // update shifted's entries
-        for (; i < header.N; ++i) {
-            entry = getEntry(i, page);
+        for (int j = i; j < header.N; ++j) {
+            entry = getEntry(j, page);
             entry.offset += length;
-            setEntry(i, entry, page);
+            setEntry(j, entry, page);
         }
         free(temp);
         // shift entries
         bytesToShift = (header.N - i) * sizeof(Entry);
         void * temp2 = malloc(bytesToShift);
         memcpy(temp2, (char *)page + PAGE_SIZE - header.N * sizeof(Entry) - sizeof(IX_SlotDirectoryHeader), bytesToShift);
-        memcpy((char *)page + PAGE_SIZE - (header.N + 1) * sizeof(Entry) - sizeof(IX_SlotDirectoryHeader), temp, bytesToShift);
+        memcpy((char *)page + PAGE_SIZE - (header.N + 1) * sizeof(Entry) - sizeof(IX_SlotDirectoryHeader), temp2, bytesToShift);
         free(temp2);
     }
     // insert
@@ -630,7 +630,7 @@ void IndexManager::insertEntryToPage(const Attribute &attribute, const void *key
 {
     // insert entry (key, pointer) to a nonleaf page
     Entry entry;
-    int i = findKeyPos(attribute, key, entry, page, false); // index
+    const int i = findKeyPos(attribute, key, entry, page, false); // index
     int start = entry.offset; // start of the the inserted (key, pointer)
     int attrSize = getAttrSize(attribute, key);
     int length = attrSize + sizeof(int); // length of the inserted (key, pointer)
@@ -643,17 +643,17 @@ void IndexManager::insertEntryToPage(const Attribute &attribute, const void *key
         // copy shifted bytes
         memcpy((char*)page + start + length, temp, bytesToShift);
         // update shifted's entries
-        for (; i < header.N; ++i) {
-            entry = getEntry(i, page);
+        for (int j = i; j < header.N; ++j) {
+            entry = getEntry(j, page);
             entry.offset += length;
-            setEntry(i, entry, page);
+            setEntry(j, entry, page);
         }
         free(temp);
         // shift entries
         bytesToShift = (header.N - i) * sizeof(Entry);
         void * temp2 = malloc(bytesToShift);
         memcpy(temp2, (char *)page + PAGE_SIZE - header.N * sizeof(Entry) - sizeof(IX_SlotDirectoryHeader), bytesToShift);
-        memcpy((char *)page + PAGE_SIZE - (header.N + 1) * sizeof(Entry) - sizeof(IX_SlotDirectoryHeader), temp, bytesToShift);
+        memcpy((char *)page + PAGE_SIZE - (header.N + 1) * sizeof(Entry) - sizeof(IX_SlotDirectoryHeader), temp2, bytesToShift);
         free(temp2);
     }
     // insert
@@ -1118,26 +1118,39 @@ IX_ScanIterator::~IX_ScanIterator()
 
 RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
 {
-    IX_SlotDirectoryHeader header = ixm->getPageHeader(page);
-    if (curEntryNum >= header.N) {
-        if(header.next == LEAF_END) return IX_EOF; // hit the end
-        ixfhptr->readPage(header.next, page); // go to next page
-        curEntryNum = 0;
+    while(1){
+        IX_SlotDirectoryHeader header = ixm->getPageHeader(page);
+        if (curEntryNum >= header.N) {
+            if(header.next == LEAF_END) return IX_EOF; // hit the end
+            ixfhptr->readPage(header.next, page); // go to next page
+            curEntryNum = 0;
+        }
+        Entry entry = ixm->getEntry(curEntryNum, page);
+        rid = ixm->getKeyRid(entry.offset, attribute, key, page);
+        ++curEntryNum;
+        if(highKey == NULL) {
+            return SUCCESS;
+        } else {
+            if(highKeyInclusive) {
+                if(ixm->keyCompare(attribute, key, highKey) <= 0) {
+                    if(rid.pageNum == -1 && rid.slotNum == -1) continue; // if hit deleted rid, start over
+                    else return SUCCESS;
+                } else return IX_EOF;
+            } else {
+                if(ixm->keyCompare(attribute, key, highKey) < 0) {
+                    if(rid.pageNum == -1 && rid.slotNum == -1) continue; // if hit deleted rid, start over
+                    else return SUCCESS;
+                } else return IX_EOF;
+            }
+        }
+        return IX_EOF;
     }
-    Entry entry = ixm->getEntry(curEntryNum, page);
-    rid = ixm->getKeyRid(entry.offset, attribute, key, page);
-    ++curEntryNum;
-    if(highKey == NULL) {
-        return SUCCESS;
-    } else {
-        if(highKeyInclusive) return ixm->keyCompare(attribute, key, highKey) <= 0 ? SUCCESS : IX_EOF;
-        else return ixm->keyCompare(attribute, key, highKey) < 0 ? SUCCESS : IX_EOF;
-    }
-    return IX_EOF;
 }
 
 RC IX_ScanIterator::close()
 {
+    free(highKey);
+    free(lowKey);
     free(page);
     return SUCCESS;
 }
@@ -1151,8 +1164,20 @@ RC IX_ScanIterator::scanInit(IXFileHandle &ixfileHandle,
 {
     ixfhptr = &ixfileHandle;
     this->attribute = attribute;
-    this->lowKey = lowKey;
-    this->highKey = highKey;
+
+    // do not use the same chuck of block
+    if(lowKey) {
+        int lowKeySize = ixm->getAttrSize(attribute, lowKey);
+        this->lowKey = malloc(lowKeySize);
+        memcpy(this->lowKey, lowKey, lowKeySize);
+    } else this->lowKey = NULL;
+    
+    if(highKey) {
+        int highKeySize = ixm->getAttrSize(attribute, highKey);
+        this->highKey = malloc(highKeySize);
+        memcpy(this->highKey, highKey, highKeySize);
+    } else this->highKey = NULL;
+
     this->lowKeyInclusive = lowKeyInclusive;
     this->highKeyInclusive = highKeyInclusive;
     this->page = malloc(PAGE_SIZE);

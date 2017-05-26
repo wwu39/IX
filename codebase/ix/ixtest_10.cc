@@ -55,7 +55,6 @@ int testCase_10(const string &indexFileName, const Attribute &attribute)
         rc = indexManager->insertEntry(ixfileHandle, attribute, &key2, rid);
         assert(rc == success && "indexManager::insertEntry() should not fail.");
     }
-
     // Scan
     rc = indexManager->scan(ixfileHandle, attribute, &key1, &key1, true, true, ix_ScanIterator);
     assert(rc == success && "indexManager::scan() should not fail.");

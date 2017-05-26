@@ -31,8 +31,8 @@ typedef struct
 
 typedef struct
 {
-    uint32_t length; 
-    int32_t offset;
+    uint16_t length; 
+    uint16_t offset;
 } Entry;
 
 
@@ -162,8 +162,8 @@ class IX_ScanIterator {
         // private field
         IXFileHandle *ixfhptr;
         Attribute attribute;
-        const void *lowKey;
-        const void *highKey;
+        void *lowKey;
+        void *highKey;
         bool lowKeyInclusive;
         bool highKeyInclusive;
         void * page; // current page

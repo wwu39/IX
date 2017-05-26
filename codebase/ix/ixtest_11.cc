@@ -180,6 +180,7 @@ int testCase_11(const string &indexFileName, const Attribute &attribute){
     if ((inRecordNum - deletedRecordNum + reInsertedRecordNum) != outRecordNum || inRecordNum == 0 
          || reInsertedRecordNum == 0 || outRecordNum == 0)
     {
+        cerr << inRecordNum - deletedRecordNum + reInsertedRecordNum << " " << outRecordNum << endl;
         cerr << "Wrong entries output... The test failed." << endl;
         rc = ix_ScanIterator.close();
         rc = indexManager->closeFile(ixfileHandle);

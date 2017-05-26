@@ -35,12 +35,12 @@ typedef struct
     int32_t offset;
 } Entry;
 
-// bool operator== (const Attribute& attr1, const Attribute& attr2) { return attr1.name == attr2.name && attr1.type == attr2.type && attr1.length == attr2.length; };
 
 class IX_ScanIterator;
 class IXFileHandle;
 
 class IndexManager {
+    friend class IX_ScanIterator;
 
     public:
         static IndexManager* instance();
@@ -90,6 +90,7 @@ class IndexManager {
         void initIXfile(const Attribute& attr, IXFileHandle &ixfileHandle);
         bool checkIXAttribute(const Attribute& attr, IXFileHandle &ixfileHandle);
         int findPosition(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, void *page);
+        int smallestLeaf(IXFileHandle &ixfileHandle, const Attribute &attribute, void *page);
 
         // insert helper
         void insertEntryToPage(const Attribute &attribute, const void *key, const RID &rid, void *page);
@@ -115,6 +116,7 @@ class IndexManager {
         int getAttrSize(const Attribute &attribute, const void *key);
         Entry getEntry(const int i, const void * page);
         void setEntry(const int i, const Entry entry, void * page); // i starts at 0
+        RID getKeyRid(int offset, const Attribute &attribute, void * key, const void * page);
 };
 
 
@@ -165,6 +167,8 @@ class IX_ScanIterator {
         bool lowKeyInclusive;
         bool highKeyInclusive;
         void * page; // current page
+        IndexManager * ixm;
+        uint16_t curEntryNum;
 
         // private method
         RC scanInit(IXFileHandle &ixfileHandle,

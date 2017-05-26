@@ -1100,6 +1100,7 @@ void IndexManager::printPage(IXFileHandle &ixfileHandle, const Attribute &attrib
             cout << "|" << rid.pageNum << "," << rid.slotNum << "|" << endl;
         }
     }
+    cout << "Free Space Size: " << getPageFreeSpaceSize(page) << endl;
 }
 
 //***********************************************************************************************************************************
@@ -1156,18 +1157,17 @@ RC IX_ScanIterator::scanInit(IXFileHandle &ixfileHandle,
     this->highKeyInclusive = highKeyInclusive;
     this->page = malloc(PAGE_SIZE);
     // find starting point
-    IX_SlotDirectoryHeader header = ixm->getPageHeader(page);
     if(this->lowKey == NULL) { // if no lowKey, start at the left most page
         ixm->smallestLeaf(*ixfhptr, this->attribute, this->page);
         this->curEntryNum = 0;
     }
     else {
         ixm->findPosition(*ixfhptr, this->attribute, this->lowKey, this->page);
+        IX_SlotDirectoryHeader header = ixm->getPageHeader(page);
         for (uint16_t i = 0; i < header.N; ++i) {
             Entry entry = ixm->getEntry(i, page);
             void * ckey = malloc(entry.length - sizeof(RID)); // current key
             ixm->getKeyRid(entry.offset, attribute, ckey, this->page);
-            //cout <<"key "<<i<<": " << *(int *)ckey << endl;
             // compare current key with lowKey
             if(this->lowKeyInclusive) { // first (key, rid) will be the first ckey larger or equal than lowKey
                 if(ixm->keyCompare(this->attribute, ckey, this->lowKey) >= 0) {

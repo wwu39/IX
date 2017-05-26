@@ -160,7 +160,7 @@ class IX_ScanIterator {
     private:
 
         // private field
-        IXFileHandle ixfileHandle;
+        IXFileHandle *ixfhptr;
         Attribute attribute;
         const void *lowKey;
         const void *highKey;

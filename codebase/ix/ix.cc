@@ -126,7 +126,6 @@ RC IndexManager::insertEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
         // recursively split ancestors, create new pages if necesasary
         // return the parent of new page
         splitAncestors(targetPageNum, attribute, pivot, newPageNum, ixfileHandle, oldHeader.parent);
-
     }
     free(page);
     return SUCCESS;
@@ -856,7 +855,7 @@ int IndexManager::keyCompare(const Attribute& attr, const void * key1, const voi
 {
     // given an attribute, compare two keys
     // key1 > key2 -> pos
-    // key2 < key2 -> neg
+    // key1 < key2 -> neg
     // key1 == key2 -> 0
     switch (attr.type) {
         case TypeInt: 
@@ -888,6 +887,9 @@ int IndexManager::keyCompare(const Attribute& attr, const void * key1, const voi
 
 RID IndexManager::getKeyRid(int offset, const Attribute &attribute, void * key, const void * page)
 {
+    // get key and rid at given offset
+    // |key|RID|
+    // ^offset
     RID rid;
     int ridOffset = offset;
     switch(attribute.type) {
@@ -1012,6 +1014,7 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle,
         bool        	highKeyInclusive,
         IX_ScanIterator &ix_ScanIterator)
 {
+    if(!ixfileHandle.getfd()) return IX_FILE_NOT_OPEN;
     return ix_ScanIterator.scanInit(ixfileHandle, attribute, lowKey, highKey, lowKeyInclusive, highKeyInclusive);
 }
 
@@ -1052,11 +1055,12 @@ void IndexManager::printPage(IXFileHandle &ixfileHandle, const Attribute &attrib
     ixfileHandle.readPage(pageNum, page);
     IX_SlotDirectoryHeader header = getPageHeader(page);
     cout << "FSOffset " << header.FS << " : N " << header. N << " : Leaf? " 
-        << header.leaf << " : Next " << header.next << " : Parent " << header.parent << endl;
+        << (int)header.leaf << " : Next " << header.next << " : Parent " << header.parent << endl;
     for (uint16_t i = 0; i < header.N; ++i) {
         Entry entry = getEntry(i, page);
         cout << "Slot " << i << ": Offset " << entry.offset <<": Length " << entry.length << ": ";
-        int offset = 0;
+        int offset = entry.offset;
+        if(!(!header.leaf && i == 0))
         switch (attribute.type) {
             case TypeInt: 
             {
@@ -1064,6 +1068,7 @@ void IndexManager::printPage(IXFileHandle &ixfileHandle, const Attribute &attrib
                 memcpy(&key, (char *)page + entry.offset, INT_SIZE);
                 offset += INT_SIZE;
                 cout << "|" << key;
+                break;
             }
             case TypeReal: 
             {
@@ -1071,6 +1076,7 @@ void IndexManager::printPage(IXFileHandle &ixfileHandle, const Attribute &attrib
                 memcpy(&key, (char *)page + entry.offset, REAL_SIZE);
                 offset += REAL_SIZE;
                 cout << "|" << key;
+                break;
             }
             case TypeVarChar:
             {
@@ -1081,16 +1087,17 @@ void IndexManager::printPage(IXFileHandle &ixfileHandle, const Attribute &attrib
                 key[vclen] = '\0';
                 offset += (4 + vclen);
                 cout << "|" << key;
+                break;
             }
-            if (header.leaf) {
-                int pointer;
-                memcpy(&pointer, (char *)page + offset, sizeof(int));
-                cout << "|" << pointer << ">|" << endl;
-            } else {
-                RID rid;
-                memcpy(&rid, (char *)page + offset, sizeof(RID));
-                cout << "|" << rid.pageNum << "," << rid.slotNum << "|" << endl;
-            }
+        }
+        if (!header.leaf) {
+            int pointer;
+            memcpy(&pointer, (char *)page + offset, sizeof(int));
+            cout << "|" << pointer << ">|" << endl;
+        } else {
+            RID rid;
+            memcpy(&rid, (char *)page + offset, sizeof(RID));
+            cout << "|" << rid.pageNum << "," << rid.slotNum << "|" << endl;
         }
     }
 }
@@ -1113,7 +1120,7 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
     IX_SlotDirectoryHeader header = ixm->getPageHeader(page);
     if (curEntryNum >= header.N) {
         if(header.next == LEAF_END) return IX_EOF; // hit the end
-        ixfileHandle.readPage(header.next, page); // go to next page
+        ixfhptr->readPage(header.next, page); // go to next page
         curEntryNum = 0;
     }
     Entry entry = ixm->getEntry(curEntryNum, page);
@@ -1141,7 +1148,7 @@ RC IX_ScanIterator::scanInit(IXFileHandle &ixfileHandle,
                 bool lowKeyInclusive,
                 bool highKeyInclusive)
 {
-    this->ixfileHandle = ixfileHandle;
+    ixfhptr = &ixfileHandle;
     this->attribute = attribute;
     this->lowKey = lowKey;
     this->highKey = highKey;
@@ -1151,23 +1158,24 @@ RC IX_ScanIterator::scanInit(IXFileHandle &ixfileHandle,
     // find starting point
     IX_SlotDirectoryHeader header = ixm->getPageHeader(page);
     if(this->lowKey == NULL) { // if no lowKey, start at the left most page
-        ixm->smallestLeaf(this->ixfileHandle, this->attribute, this->page);
+        ixm->smallestLeaf(*ixfhptr, this->attribute, this->page);
         this->curEntryNum = 0;
     }
     else {
-        ixm->findPosition(this->ixfileHandle, this->attribute, this->lowKey, this->page);
+        ixm->findPosition(*ixfhptr, this->attribute, this->lowKey, this->page);
         for (uint16_t i = 0; i < header.N; ++i) {
             Entry entry = ixm->getEntry(i, page);
             void * ckey = malloc(entry.length - sizeof(RID)); // current key
             ixm->getKeyRid(entry.offset, attribute, ckey, this->page);
+            //cout <<"key "<<i<<": " << *(int *)ckey << endl;
             // compare current key with lowKey
             if(this->lowKeyInclusive) { // first (key, rid) will be the first ckey larger or equal than lowKey
-                if(ixm->keyCompare(this->attribute, ckey, this->highKey) >= 0) {
+                if(ixm->keyCompare(this->attribute, ckey, this->lowKey) >= 0) {
                     curEntryNum = i;
                     break;
                 }
             } else { // first (key, rid) will be the first ckey larger than lowKey
-                if(ixm->keyCompare(this->attribute, ckey, this->highKey) > 0) {
+                if(ixm->keyCompare(this->attribute, ckey, this->lowKey) > 0) {
                     curEntryNum = i;
                     break;
                 }

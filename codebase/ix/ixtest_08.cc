@@ -46,7 +46,7 @@ int testCase_8(const string &indexFileName, const Attribute &attribute)
         key = i;
         rid.pageNum = key;
         rid.slotNum = key * 3;
-
+        
         rc = indexManager->insertEntry(ixfileHandle, attribute, &key, rid);
         assert(rc == success && "indexManager::insertEntry() should not fail.");
     }
@@ -57,13 +57,14 @@ int testCase_8(const string &indexFileName, const Attribute &attribute)
         key = i;
         rid.pageNum = key;
         rid.slotNum = key * 3;
-
+        
         rc = indexManager->insertEntry(ixfileHandle, attribute, &key, rid);
         assert(rc == success && "indexManager::insertEntry() should not fail.");
 
         inRidSlotNumSum += rid.slotNum;
     }
-
+    for (int j=1;j<=4;++j)
+    indexManager->printPage(ixfileHandle, attribute, j);
     // Scan
     rc = indexManager->scan(ixfileHandle, attribute, &value, NULL, true, true, ix_ScanIterator);
     assert(rc == success && "indexManager::scan() should not fail.");

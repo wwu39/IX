@@ -111,7 +111,6 @@ RC IndexManager::insertEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
         // return the pivot
         // pivot should be inserted to the parent
         splitPages(page, newPage, attribute, key, rid, pivot);
-
         
         // update headers
         IX_SlotDirectoryHeader oldHeader = getPageHeader(page);
@@ -126,6 +125,7 @@ RC IndexManager::insertEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
         // recursively split ancestors, create new pages if necesasary
         // return the parent of new page
         splitAncestors(targetPageNum, attribute, pivot, newPageNum, ixfileHandle, oldHeader.parent);
+        free(pivot);
     }
     free(page);
     return SUCCESS;
@@ -226,6 +226,8 @@ void IndexManager::splitPages(void * oldPage, void* newPage, const Attribute &at
     void * doublepage = malloc(2 * PAGE_SIZE);
     prepareDoublePage(oldPage, attribute, key, rid, doublepage);
 
+    //printDoublePage(attribute,doublepage);//
+
     char * upper = (char *)doublepage;
     char * lower = (char *)doublepage + PAGE_SIZE;
 
@@ -238,6 +240,17 @@ void IndexManager::splitPages(void * oldPage, void* newPage, const Attribute &at
             memcpy(pivot, upper + entry.offset, entry.length - sizeof(RID)); // we don't need the rid
             pivotEntry = entry;
             pivotIndex = i;
+            break;
+        }
+    }
+    for(uint16_t i = 0; i < pivotIndex; ++i) {
+        Entry entry = getEntry(i, lower);
+        void * curkey = malloc(PAGE_SIZE);
+        getKeyRid(entry.offset, attribute, curkey, upper);
+        if(keyCompare(attribute, pivot, curkey) == 0) {
+            pivotEntry = entry;
+            pivotIndex = i;
+            free(curkey);
             break;
         }
     }
@@ -333,16 +346,12 @@ void IndexManager::prepareDoublePage(const void * page, const Attribute &attribu
     // shifting
     if (bytesToShift != 0) {
         memcpy(upper + start + length, (char *)page + start, bytesToShift);
-        // update shifted's entries
-        for (; i < header.N; ++i) {
-            entry = getEntry(i, lower); // get entry from the lower half
+        // update shifted's entries and shift them
+        for (int j = i; j < header.N; ++j) {
+            entry = getEntry(j, page);
             entry.offset += length;
-            setEntry(i, entry, lower); // set entry to the lower half
+            setEntry(j + 1, entry, lower);
         }
-        // shift entries
-        memcpy(lower + PAGE_SIZE - (header.N + 1) * sizeof(Entry),
-              (char *)page + PAGE_SIZE - header.N * sizeof(Entry),
-                                   (header.N - i) * sizeof(Entry));
     }
 
     // insert
@@ -376,6 +385,17 @@ void IndexManager::splitPages(void * oldPage, void* newPage, const Attribute &at
             memcpy(pivot, upper + entry.offset, entry.length - sizeof(int)); // we don't need the pointer
             pivotEntry = entry;
             pivotIndex = i;
+            break;
+        }
+    }
+    for(uint16_t i = 0; i < pivotIndex; ++i) {
+        void * curkey = malloc(PAGE_SIZE);
+        Entry entry = getEntry(i, lower);
+        getKeyRid(entry.offset, attribute, curkey, upper);
+        if(keyCompare(attribute, pivot, curkey) == 0) {
+            pivotEntry = entry;
+            pivotIndex = i;
+            free(curkey);
             break;
         }
     }
@@ -478,16 +498,12 @@ void IndexManager::prepareDoublePage(const void * page, const Attribute &attribu
     // shifting
     if (bytesToShift != 0) {
         memcpy(upper + start + length, (char *)page + start, bytesToShift);
-        // update shifted's entries
-        for (; i < header.N; ++i) {
-            entry = getEntry(i, lower); // get entry from the lower half
+        // update shifted's entries and shift them
+        for (int j = i; j < header.N; ++j) {
+            entry = getEntry(j, page);
             entry.offset += length;
-            setEntry(i, entry, lower); // set entry to the lower half
+            setEntry(j + 1, entry, lower);
         }
-        // shift entries
-        memcpy(lower + PAGE_SIZE - (header.N + 1) * sizeof(Entry),
-              (char *)page + PAGE_SIZE - header.N * sizeof(Entry),
-                                   (header.N - i) * sizeof(Entry));
     }
 
     // insert
@@ -873,11 +889,11 @@ int IndexManager::keyCompare(const Attribute& attr, const void * key1, const voi
             char key1str[vclen + 1];
             memcpy(key1str, (char *)key1 + sizeof(int), vclen);
             key1str[vclen]='\0';
-
-            memcpy(&vclen, key2, 4);
-            char key2str[vclen + 1];
-            memcpy(key2str, (char *)key2 + sizeof(int), vclen);
-            key2str[vclen]='\0';
+            int vclen2;
+            memcpy(&vclen2, key2, 4);
+            char key2str[vclen2 + 1];
+            memcpy(key2str, (char *)key2 + sizeof(int), vclen2);
+            key2str[vclen2]='\0';
 
             return strcmp(key1str, key2str);
         }
@@ -904,7 +920,7 @@ RID IndexManager::getKeyRid(int offset, const Attribute &attribute, void * key, 
         case TypeVarChar:
         {
             int vclen;
-            memcpy(&vclen, (char *)page, 4);
+            memcpy(&vclen, (char *)page + offset, 4);
             memcpy(key, (char *)page + offset, 4 + vclen); // copy length as well as actual chars
             ridOffset += (4 + vclen);
             break;
@@ -1023,6 +1039,8 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle,
 //                                                                PRINT                                                            **
 //***********************************************************************************************************************************
 void IndexManager::printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute) {
+    for(unsigned k=1;k<ixfileHandle.getNumberOfPages();++k)printPage(ixfileHandle,attribute,k);return;
+    // tested
     int numOfPage = ixfileHandle.getNumberOfPages();
     if (numOfPage == 0) { //nothing there
         cout << "{}" << endl;
@@ -1101,6 +1119,63 @@ void IndexManager::printPage(IXFileHandle &ixfileHandle, const Attribute &attrib
         }
     }
     cout << "Free Space Size: " << getPageFreeSpaceSize(page) << endl;
+    free(page);
+}
+
+void IndexManager::printDoublePage(const Attribute &attribute, void * page)
+{
+    cout << "-----------------------------DOUBLEPAGE-----------------------------" << endl;
+    char * upper = (char*)page;
+    char * lower = (char*)page + PAGE_SIZE;
+    IX_SlotDirectoryHeader header = getPageHeader(lower);
+    cout << "FSOffset " << header.FS << " : N " << header. N << " : Leaf? " 
+        << (int)header.leaf << " : Next " << header.next << " : Parent " << header.parent << endl;
+    for (uint16_t i = 0; i < header.N; ++i) {
+        Entry entry = getEntry(i, lower);
+        cout << "Slot " << i << ": Offset " << entry.offset <<": Length " << entry.length << ": ";
+        int offset = entry.offset;
+        if(!(!header.leaf && i == 0))
+        switch (attribute.type) {
+            case TypeInt: 
+            {
+                int key;
+                memcpy(&key, upper + entry.offset, INT_SIZE);
+                offset += INT_SIZE;
+                cout << "|" << key;
+                break;
+            }
+            case TypeReal: 
+            {
+                float key;
+                memcpy(&key, upper + entry.offset, REAL_SIZE);
+                offset += REAL_SIZE;
+                cout << "|" << key;
+                break;
+            }
+            case TypeVarChar:
+            {
+                int vclen;
+                memcpy(&vclen, upper + entry.offset, 4);
+                char key[vclen + 1];
+                memcpy(key, upper + entry.offset + 4, vclen);
+                key[vclen] = '\0';
+                offset += (4 + vclen);
+                cout << "|" << key;
+                break;
+            }
+        }
+        if (!header.leaf) {
+            int pointer;
+            memcpy(&pointer, upper + offset, sizeof(int));
+            cout << "|" << pointer << ">|" << endl;
+        } else {
+            RID rid;
+            memcpy(&rid, upper + offset, sizeof(RID));
+            cout << "|" << rid.pageNum << "," << rid.slotNum << "|" << endl;
+        }
+    }
+    cout << "Free Space Size: " << getPageFreeSpaceSize(lower) << endl;
+    free(page);
 }
 
 //***********************************************************************************************************************************
@@ -1129,6 +1204,7 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
         rid = ixm->getKeyRid(entry.offset, attribute, key, page);
         ++curEntryNum;
         if(highKey == NULL) {
+            if(rid.pageNum == -1 && rid.slotNum == -1) continue; // if hit deleted rid, start over
             return SUCCESS;
         } else {
             if(highKeyInclusive) {
@@ -1143,8 +1219,8 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
                 } else return IX_EOF;
             }
         }
-        return IX_EOF;
     }
+    return IX_EOF;
 }
 
 RC IX_ScanIterator::close()
@@ -1197,11 +1273,13 @@ RC IX_ScanIterator::scanInit(IXFileHandle &ixfileHandle,
             if(this->lowKeyInclusive) { // first (key, rid) will be the first ckey larger or equal than lowKey
                 if(ixm->keyCompare(this->attribute, ckey, this->lowKey) >= 0) {
                     curEntryNum = i;
+                    free(ckey);
                     break;
                 }
             } else { // first (key, rid) will be the first ckey larger than lowKey
                 if(ixm->keyCompare(this->attribute, ckey, this->lowKey) > 0) {
                     curEntryNum = i;
+                    free(ckey);
                     break;
                 }
             }

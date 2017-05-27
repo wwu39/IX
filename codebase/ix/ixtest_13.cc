@@ -57,7 +57,6 @@ int testCase_13(const string &indexFileName, const Attribute &attribute)
 
         rid.pageNum = i;
         rid.slotNum = i;
-
         rc = indexManager->insertEntry(ixfileHandle, attribute, &key, rid);
         assert(rc == success && "indexManager::insertEntry() should not fail.");
 
@@ -94,15 +93,16 @@ int testCase_13(const string &indexFileName, const Attribute &attribute)
         << readPageCount
         << " " << writePageCount
         << " " << appendPageCount << endl;
-
+    
     //scan
     offset = tested_ascii;
     *(int *)key = offset;
     for(unsigned j = 0; j < offset; j++)
     {
         key[4 + j] = 'a' + offset - 1;
+        cout << key[4 + j];
     }
-
+    cout << endl;
     rc = indexManager->scan(ixfileHandle, attribute, &key, &key, true, true, ix_ScanIterator);
     assert(rc == success && "indexManager::scan() should not fail.");
 
@@ -123,6 +123,7 @@ int testCase_13(const string &indexFileName, const Attribute &attribute)
     cerr << endl;
 
     if (count1 != numOfTuplesTobeScanned) {
+        cerr << count1 << " " << numOfTuplesTobeScanned << endl;
         cerr << "Wrong entry output... The test failed..." << endl;
         rc = ix_ScanIterator.close();
         rc = indexManager->closeFile(ixfileHandle);

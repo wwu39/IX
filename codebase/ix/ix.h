@@ -77,7 +77,7 @@ class IndexManager {
 
         // for debug
         void printPage(IXFileHandle &ixfileHandle, const Attribute &attribute, int pageNum);
-        void test(IXFileHandle &ixfileHandle, const Attribute &attribute);
+        void printDoublePage(const Attribute &attribute, void * page);
 
     protected:
         IndexManager();
